@@ -93,6 +93,8 @@
   </div>
 
   <script>
+    const BACKEND_URL = "https://your-backend.onrender.com"; // Change to your actual backend URL
+
     async function buyBundle(amount) {
       const phone = document.getElementById("phone").value.trim();
       if (!phone.match(/^2547\d{8}$/)) {
@@ -104,7 +106,7 @@
       if (!confirmBuy) return;
 
       try {
-        const res = await fetch("https://your-backend-name.onrender.com/stkpush", {
+        const res = await fetch(`${BACKEND_URL}/stkpush`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -117,10 +119,10 @@
           alert("✅ STK Push sent to your phone. Enter PIN to complete.");
         } else {
           console.error(data);
-          alert("❌ Failed to send STK Push: " + (data.details?.errorMessage || "Unknown error"));
+          alert("❌ Failed: " + (data.details?.errorMessage || "Unknown error"));
         }
       } catch (err) {
-        alert("❌ Error: " + err.message);
+        alert("❌ Network error: " + err.message);
       }
     }
   </script>
