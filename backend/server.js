@@ -11,10 +11,10 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.use(cors()); // Allow frontend from another origin
+app.use(cors());
 app.use(bodyParser.json());
 
-// STK Push Token
+// Get Access Token
 async function getAccessToken() {
   const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
 
@@ -26,10 +26,11 @@ async function getAccessToken() {
       },
     }
   );
+
   return response.data.access_token;
 }
 
-// Handle STK Push
+// STK Push Route
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
@@ -74,18 +75,19 @@ app.post("/stkpush", async (req, res) => {
   }
 });
 
-// M-PESA Callback
+// ✅ M-PESA Callback Handler
 app.post("/mpesa/callback", (req, res) => {
   const callback = req.body?.Body?.stkCallback;
   console.log("📞 M-PESA Callback Received:", JSON.stringify(callback, null, 2));
 
   if (callback?.ResultCode === 0) {
     console.log("✅ Payment Success!");
+    // Optionally: Save to database or trigger bundle delivery
   } else {
     console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
   }
 
-  res.sendStatus(200);
+  res.sendStatus(200); // Always respond 200
 });
 
 app.listen(port, () => {
