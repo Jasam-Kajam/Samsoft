@@ -90,13 +90,6 @@ app.post("/mpesa/callback", (req, res) => {
   res.sendStatus(200); // Always respond 200
 });
 
-// ✅ Serve Frontend
-app.use(express.static(path.join(__dirname, '../frontend')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
-});
-
 app.listen(port, () => {
   console.log(`🚀 Backend running on http://localhost:${port}`);
 });
