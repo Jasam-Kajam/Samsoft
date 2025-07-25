@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: quicktelbundles
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: SHORTCODE
+        value: 5666236
+      - key: PASSKEY
+        value: Your_Safaricom_Passkey
+      - key: CONSUMER_KEY
+        value: Your_Consumer_Key
+      - key: CONSUMER_SECRET
+        value: Your_Consumer_Secret
+      - key: CALLBACK_URL
+        value: https://quicktelbundles.onrender.com/mpesa/callback
