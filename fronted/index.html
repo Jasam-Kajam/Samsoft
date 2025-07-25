@@ -1,1 +1,128 @@
-fronted
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quicktel Bundles</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .bundle-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    .card h3 {
+      margin: 0;
+      color: #1b5e20;
+    }
+    .card p {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .card button {
+      background: #1b5e20;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .card button:hover {
+      background: #2e7d32;
+    }
+    input {
+      padding: 8px;
+      width: 100%;
+      max-width: 300px;
+      margin: 20px auto;
+      display: block;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Quicktel Bundles</h1>
+
+  <input id="phone" type="tel" placeholder="Enter your Safaricom number (e.g. 2547XXXXXXX)" />
+
+  <div class="bundle-container">
+    <div class="card">
+      <h3>50MB</h3>
+      <p>KES 2</p>
+      <button onclick="buyBundle(2)">Buy</button>
+    </div>
+    <div class="card">
+      <h3>150MB</h3>
+      <p>KES 5</p>
+      <button onclick="buyBundle(5)">Buy</button>
+    </div>
+    <div class="card">
+      <h3>500MB</h3>
+      <p>KES 10</p>
+      <button onclick="buyBundle(10)">Buy</button>
+    </div>
+    <div class="card">
+      <h3>1GB</h3>
+      <p>KES 20</p>
+      <button onclick="buyBundle(20)">Buy</button>
+    </div>
+    <div class="card">
+      <h3>2GB</h3>
+      <p>KES 50</p>
+      <button onclick="buyBundle(50)">Buy</button>
+    </div>
+  </div>
+
+  <script>
+    async function buyBundle(amount) {
+      const phone = document.getElementById("phone").value.trim();
+      if (!phone.match(/^2547\d{8}$/)) {
+        alert("Please enter a valid Safaricom number in format 2547XXXXXXXX");
+        return;
+      }
+
+      const confirmBuy = confirm(`Buy bundle worth KES ${amount} for ${phone}?`);
+      if (!confirmBuy) return;
+
+      try {
+        const res = await fetch("/stkpush", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ phone, amount })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("✅ STK Push sent to your phone. Enter PIN to complete.");
+        } else {
+          console.error(data);
+          alert("❌ Failed to send STK Push: " + (data.details?.errorMessage || "Unknown error"));
+        }
+      } catch (err) {
+        alert("❌ Error: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
