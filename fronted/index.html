@@ -104,7 +104,7 @@
       if (!confirmBuy) return;
 
       try {
-        const res = await fetch("/stkpush", {
+        const res = await fetch("https://your-backend-name.onrender.com/stkpush", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
