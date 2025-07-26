@@ -4,7 +4,6 @@ const axios = require("axios");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
-const path = require("path");
 
 dotenv.config();
 
@@ -14,29 +13,34 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Get Access Token
+// Get M-PESA Access Token
 async function getAccessToken() {
-  const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+  try {
+    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
 
-  const response = await axios.get(
-    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
-    }
-  );
+    const response = await axios.get(
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      {
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      }
+    );
 
-  return response.data.access_token;
+    return response.data.access_token;
+  } catch (error) {
+    console.error("🔐 Failed to fetch access token:", error.response?.data || error.message);
+    throw new Error("Access token fetch failed");
+  }
 }
 
-// STK Push Route
+// STK Push Endpoint
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
 
     if (!phone || !amount) {
-      return res.status(400).json({ error: "Phone and amount required" });
+      return res.status(400).json({ error: "Phone and amount are required" });
     }
 
     const access_token = await getAccessToken();
@@ -67,7 +71,7 @@ app.post("/stkpush", async (req, res) => {
       }
     );
 
-    res.status(200).json({ message: data: response.data });
+    res.status(200).json({ message: "STK push sent", data: response.data });
   } catch (err) {
     const errorDetails = err.response?.data || err.message;
     console.error("❌ STK push failed:", errorDetails);
@@ -75,21 +79,22 @@ app.post("/stkpush", async (req, res) => {
   }
 });
 
-// ✅ M-PESA Callback Handler
+// M-PESA Callback Handler
 app.post("/mpesa/callback", (req, res) => {
   const callback = req.body?.Body?.stkCallback;
-  console.log("📞 M-PESA Callback Received:", JSON.stringify(callback, null, 2));
+  console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
 
   if (callback?.ResultCode === 0) {
-    console.log("✅ Payment Success!");
-    // Optionally: Save to database or trigger bundle delivery
+    console.log("✅ Payment Successful");
+    // TODO: Save to DB or deliver bundle
   } else {
     console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
   }
 
-  res.sendStatus(200); // Always respond 200
+  res.sendStatus(200); // Respond with 200 to prevent retries
 });
 
+// Start Server
 app.listen(port, () => {
-  console.log(`🚀 Backend running on http://localhost:${port}`);
+  console.log(`🚀 Server running on http://localhost:${port}`);
 });
