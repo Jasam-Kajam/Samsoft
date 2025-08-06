@@ -11,31 +11,47 @@
       margin: 0;
       padding: 20px;
     }
+
     h1 {
       text-align: center;
       color: #333;
     }
+
     .bundle-container {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 16px;
       margin-top: 30px;
     }
+
     .card {
       background: white;
       border-radius: 12px;
       padding: 16px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
+
+    .card img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
+      margin-bottom: 10px;
+    }
+
     .card h3 {
       margin: 0;
       color: #1b5e20;
     }
+
     .card p {
       margin: 8px 0;
       font-size: 14px;
     }
+
     .card button {
       background: #1b5e20;
       color: white;
@@ -45,9 +61,11 @@
       cursor: pointer;
       transition: background 0.3s;
     }
+
     .card button:hover {
       background: #2e7d32;
     }
+
     input {
       padding: 8px;
       width: 100%;
@@ -66,26 +84,31 @@
 
   <div class="bundle-container">
     <div class="card">
+      <img src="https://public-files-paystack-prod.s3.eu-west-1.amazonaws.com/integration-logos/rssmtvcf4bathncmrv37.jpeg" alt="Quicktel Logo" />
       <h3>50MB</h3>
       <p>KES 2</p>
       <button onclick="buyBundle(2)">Buy</button>
     </div>
     <div class="card">
+      <img src="https://public-files-paystack-prod.s3.eu-west-1.amazonaws.com/integration-logos/rssmtvcf4bathncmrv37.jpeg" alt="Quicktel Logo" />
       <h3>150MB</h3>
       <p>KES 5</p>
       <button onclick="buyBundle(5)">Buy</button>
     </div>
     <div class="card">
+      <img src="https://public-files-paystack-prod.s3.eu-west-1.amazonaws.com/integration-logos/rssmtvcf4bathncmrv37.jpeg" alt="Quicktel Logo" />
       <h3>500MB</h3>
       <p>KES 10</p>
       <button onclick="buyBundle(10)">Buy</button>
     </div>
     <div class="card">
+      <img src="https://public-files-paystack-prod.s3.eu-west-1.amazonaws.com/integration-logos/rssmtvcf4bathncmrv37.jpeg" alt="Quicktel Logo" />
       <h3>1GB</h3>
       <p>KES 20</p>
       <button onclick="buyBundle(20)">Buy</button>
     </div>
     <div class="card">
+      <img src="https://public-files-paystack-prod.s3.eu-west-1.amazonaws.com/integration-logos/rssmtvcf4bathncmrv37.jpeg" alt="Quicktel Logo" />
       <h3>2GB</h3>
       <p>KES 50</p>
       <button onclick="buyBundle(50)">Buy</button>
@@ -93,7 +116,7 @@
   </div>
 
   <script>
-    const BACKEND_URL = "https://airtimestore-s.onrender.com"; // Change to your actual backend URL
+    const BACKEND_URL = "https://airtimestore-s.onrender.com"; // your backend URL
 
     async function buyBundle(amount) {
       const phone = document.getElementById("phone").value.trim();
