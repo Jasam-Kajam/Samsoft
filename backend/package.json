@@ -1,7 +1,7 @@
 {
-  "name": "quicktelbundles",
+  "name": "5",
   "version": "1.0.0",
-  "description": "Safaricom STK Push powered bundles site",
+  "description": "f",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
