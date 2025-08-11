@@ -11,19 +11,16 @@
       margin: 0;
       padding: 20px;
     }
-
     h1 {
       text-align: center;
       color: #333;
     }
-
     .bundle-container {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 16px;
       margin-top: 30px;
     }
-
     .card {
       background: white;
       border-radius: 12px;
@@ -34,24 +31,20 @@
       flex-direction: column;
       align-items: center;
     }
-
     .card img {
       width: 60px;
       height: 60px;
       object-fit: contain;
       margin-bottom: 10px;
     }
-
     .card h3 {
       margin: 0;
       color: #1b5e20;
     }
-
     .card p {
       margin: 8px 0;
       font-size: 14px;
     }
-
     .card button {
       background: #1b5e20;
       color: white;
@@ -61,11 +54,9 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-
     .card button:hover {
       background: #2e7d32;
     }
-
     input {
       padding: 8px;
       width: 100%;
@@ -116,7 +107,7 @@
   </div>
 
   <script>
-    const BACKEND_URL = "https://weks.xo.je/stkpush.php"; // your backend URL
+    const BACKEND_URL = "https://weks.xo.je/stkpush.php"; // Your backend endpoint
 
     async function buyBundle(amount) {
       const phone = document.getElementById("phone").value.trim();
@@ -129,7 +120,7 @@
       if (!confirmBuy) return;
 
       try {
-        const res = await fetch(`${BACKEND_URL}/stkpush`, {
+        const res = await fetch(BACKEND_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
