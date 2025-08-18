@@ -75,6 +75,13 @@
       border-radius: 6px;
       border: 1px solid #ccc;
     }
+
+    #status {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: #555;
+    }
   </style>
 </head>
 <body>
@@ -115,11 +122,16 @@
     </div>
   </div>
 
+  <p id="status"></p>
+
   <script>
-    const BACKEND_URL = "https://airtimestore-s.onrender.com"; // your backend URL
+    const BACKEND_URL = "https://samsoft-coral.vercel.app"; // new backend URL
 
     async function buyBundle(amount) {
       const phone = document.getElementById("phone").value.trim();
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = "";
+
       if (!phone.match(/^2547\d{8}$/)) {
         alert("Please enter a valid Safaricom number in format 2547XXXXXXXX");
         return;
@@ -127,6 +139,8 @@
 
       const confirmBuy = confirm(`Buy bundle worth KES ${amount} for ${phone}?`);
       if (!confirmBuy) return;
+
+      statusEl.textContent = "⏳ Processing request...";
 
       try {
         const res = await fetch(`${BACKEND_URL}/stkpush`, {
@@ -138,14 +152,16 @@
         });
 
         const data = await res.json();
+
         if (res.ok) {
-          alert("✅ STK Push sent to your phone. Enter PIN to complete.");
+          statusEl.textContent = "✅ STK Push sent! Enter PIN on your phone to complete.";
         } else {
-          console.error(data);
-          alert("❌ Failed: " + (data.details?.errorMessage || "Unknown error"));
+          console.error("Backend error:", data);
+          statusEl.textContent = "❌ Failed: " + (data.details?.errorMessage || data.message || "Unknown error");
         }
       } catch (err) {
-        alert("❌ Network error: " + err.message);
+        console.error("Network error:", err);
+        statusEl.textContent = "❌ Network error: " + err.message;
       }
     }
   </script>
