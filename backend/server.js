@@ -4,7 +4,7 @@ const axios = require("axios");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
-const Africastalking = require("africastalking"); // ✅ Added
+const Africastalking = require("africastalking");
 
 dotenv.config();
 
@@ -16,15 +16,17 @@ app.use(bodyParser.json());
 
 // ✅ Configure Africa’s Talking
 const at = Africastalking({
-  apiKey: process.env.AT_API_KEY, // put your Africa’s Talking API key in .env
+  apiKey: process.env.AT_API_KEY, // Africa’s Talking API key
   username: process.env.AT_USERNAME || "sandbox", // sandbox or live username
 });
 const sms = at.SMS;
 
-// Get M-PESA Access Token
+// 🔑 Get M-PESA Access Token
 async function getAccessToken() {
   try {
-    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+    const auth = Buffer.from(
+      `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
+    ).toString("base64");
 
     const response = await axios.get(
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
@@ -37,12 +39,49 @@ async function getAccessToken() {
 
     return response.data.access_token;
   } catch (error) {
-    console.error("🔐 Failed to fetch access token:", error.response?.data || error.message);
+    console.error(
+      "🔐 Failed to fetch access token:",
+      error.response?.data || error.message
+    );
     throw new Error("Access token fetch failed");
   }
 }
 
-// STK Push Endpoint
+// 📌 Register C2B URLs (run once in production)
+app.get("/register-url", async (req, res) => {
+  try {
+    const access_token = await getAccessToken();
+
+    const registerPayload = {
+      ShortCode: process.env.SHORTCODE,
+      ResponseType: "Completed",
+      ConfirmationURL: `${process.env.BASE_URL}/mpesa/confirmation`,
+      ValidationURL: `${process.env.BASE_URL}/mpesa/validation`,
+    };
+
+    const response = await axios.post(
+      "https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl",
+      registerPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+
+    res.status(200).json({
+      message: "✅ URLs registered successfully",
+      data: response.data,
+    });
+  } catch (err) {
+    console.error("❌ URL registration failed:", err.response?.data || err.message);
+    res
+      .status(500)
+      .json({ error: "URL registration failed", details: err.response?.data || err.message });
+  }
+});
+
+// 💳 STK Push Endpoint
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
@@ -53,7 +92,9 @@ app.post("/stkpush", async (req, res) => {
 
     const access_token = await getAccessToken();
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
-    const password = Buffer.from(`${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`).toString("base64");
+    const password = Buffer.from(
+      `${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`
+    ).toString("base64");
 
     const stkRequest = {
       BusinessShortCode: process.env.SHORTCODE,
@@ -79,15 +120,20 @@ app.post("/stkpush", async (req, res) => {
       }
     );
 
-    res.status(200).json({ message: " Confirm Payment on Your Screen", data: response.data });
+    res.status(200).json({
+      message: "📲 Confirm Payment on Your Screen",
+      data: response.data,
+    });
   } catch (err) {
     const errorDetails = err.response?.data || err.message;
     console.error("❌ STK push failed:", errorDetails);
-    res.status(500).json({ error: "STK Push failed", details: errorDetails });
+    res
+      .status(500)
+      .json({ error: "STK Push failed", details: errorDetails });
   }
 });
 
-// M-PESA Callback Handler
+// 📞 M-PESA Callback Handler
 app.post("/mpesa/callback", async (req, res) => {
   const callback = req.body?.Body?.stkCallback;
   console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
@@ -95,11 +141,9 @@ app.post("/mpesa/callback", async (req, res) => {
   if (callback?.ResultCode === 0) {
     console.log("✅ Payment Successful");
 
-    // Extract phone + amount from callback
     const phone = callback.CallbackMetadata?.Item?.find(i => i.Name === "PhoneNumber")?.Value;
     const amount = callback.CallbackMetadata?.Item?.find(i => i.Name === "Amount")?.Value;
 
-    // ✅ Send SMS confirmation
     try {
       const response = await sms.send({
         to: [phone],
@@ -109,16 +153,29 @@ app.post("/mpesa/callback", async (req, res) => {
     } catch (smsErr) {
       console.error("❌ SMS sending failed:", smsErr);
     }
-
-    // TODO: Save to DB or deliver bundle
   } else {
     console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
   }
 
-  res.sendStatus(200); // Respond with 200 to prevent retries
+  res.sendStatus(200);
 });
 
-// Start Server
+// 📥 C2B Confirmation URL
+app.post("/mpesa/confirmation", (req, res) => {
+  console.log("📥 Confirmation Data:", JSON.stringify(req.body, null, 2));
+  res.sendStatus(200);
+});
+
+// 📥 C2B Validation URL
+app.post("/mpesa/validation", (req, res) => {
+  console.log("📥 Validation Data:", JSON.stringify(req.body, null, 2));
+  res.json({
+    ResultCode: 0,
+    ResultDesc: "Accepted",
+  });
+});
+
+// 🚀 Start Server
 app.listen(port, () => {
   console.log(`🚀 Server running on http://localhost:${port}`);
 });
