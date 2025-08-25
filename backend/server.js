@@ -4,7 +4,6 @@ const axios = require("axios");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
-const Africastalking = require("africastalking"); // ✅ Added
 
 dotenv.config();
 
@@ -13,13 +12,6 @@ const port = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(bodyParser.json());
-
-// ✅ Configure Africa’s Talking
-const at = Africastalking({
-  apiKey: process.env.AT_API_KEY, // put your Africa’s Talking API key in .env
-  username: process.env.AT_USERNAME || "sandbox", // sandbox or live username
-});
-const sms = at.SMS;
 
 // Get M-PESA Access Token
 async function getAccessToken() {
@@ -88,28 +80,12 @@ app.post("/stkpush", async (req, res) => {
 });
 
 // M-PESA Callback Handler
-app.post("/mpesa/callback", async (req, res) => {
+app.post("/mpesa/callback", (req, res) => {
   const callback = req.body?.Body?.stkCallback;
   console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
 
   if (callback?.ResultCode === 0) {
     console.log("✅ Payment Successful");
-
-    // Extract phone + amount from callback
-    const phone = callback.CallbackMetadata?.Item?.find(i => i.Name === "PhoneNumber")?.Value;
-    const amount = callback.CallbackMetadata?.Item?.find(i => i.Name === "Amount")?.Value;
-
-    // ✅ Send SMS confirmation
-    try {
-      const response = await sms.send({
-        to: [phone],
-        message: `Your payment of KES ${amount} was successful. Bundles delivered. Thank you for using our service!`,
-      });
-      console.log("📩 SMS Sent:", response);
-    } catch (smsErr) {
-      console.error("❌ SMS sending failed:", smsErr);
-    }
-
     // TODO: Save to DB or deliver bundle
   } else {
     console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
