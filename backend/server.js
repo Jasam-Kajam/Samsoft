@@ -121,7 +121,7 @@ app.post("/stkpush", async (req, res) => {
     );
 
     res.status(200).json({
-      message: "📲 Confirm Payment on Your Screen",
+      message: "📲 𝐂𝐇𝐄𝐂𝐊 𝐘𝐎𝐔𝐑 𝐏𝐇𝐎𝐍𝐄 𝐓𝐎 𝐂𝐎𝐌𝐏𝐋𝐄𝐓𝐄 𝐏𝐀𝐘𝐌𝐄𝐍𝐓",
       data: response.data,
     });
   } catch (err) {
