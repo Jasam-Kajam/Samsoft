@@ -1,6 +1,10 @@
 import axios from "axios";
 
 async function getAccessToken() {
+  if (!process.env.CONSUMER_KEY || !process.env.CONSUMER_SECRET) {
+    throw new Error("❌ Missing CONSUMER_KEY or CONSUMER_SECRET in env.");
+  }
+
   const auth = Buffer.from(
     `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
   ).toString("base64");
@@ -11,6 +15,7 @@ async function getAccessToken() {
       headers: { Authorization: `Basic ${auth}` },
     }
   );
+
   return response.data.access_token;
 }
 
@@ -22,11 +27,15 @@ export default async function handler(req, res) {
   try {
     const accessToken = await getAccessToken();
 
+    if (!process.env.SHORTCODE) {
+      throw new Error("❌ Missing SHORTCODE in env.");
+    }
+
     const registerPayload = {
       ShortCode: process.env.SHORTCODE,
       ResponseType: "Completed",
-      ConfirmationURL: `${process.env.BASE_URL}/api/mpesa/confirmation`,
-      ValidationURL: `${process.env.BASE_URL}/api/mpesa/validation`,
+      ConfirmationURL: "https://samsoft-coral.vercel.app/api/c2b/confirmation",
+      ValidationURL: "https://samsoft-coral.vercel.app/api/c2b/validation",
     };
 
     const response = await axios.post(
