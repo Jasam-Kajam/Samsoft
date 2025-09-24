@@ -57,8 +57,8 @@ app.post("/stkpush", async (req, res) => {
       PartyB: process.env.SHORTCODE,
       PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
-      AccountReference: "5666236",
-      TransactionDesc: "Quicktel Bundles Store 5666236",
+      AccountReference: "",
+      TransactionDesc: "Quicktel Bundles Store",
     };
 
     const response = await axios.post(
