@@ -6,7 +6,7 @@ async function getAccessToken() {
   ).toString("base64");
 
   const response = await axios.get(
-    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
     {
       headers: { Authorization: `Basic ${auth}` },
     }
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     };
 
     const response = await axios.post(
-      "https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl",
+      "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl",
       registerPayload,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     );
 
     res.status(200).json({
-      message: "✅ M-PESA URLs registered successfully",
+      message: "✅ M-PESA URLs registered successfully (Sandbox)",
       data: response.data,
     });
   } catch (err) {
