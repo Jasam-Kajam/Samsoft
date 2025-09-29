@@ -7,8 +7,9 @@ async function getAccessToken() {
     `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
   ).toString("base64");
 
+  // ✅ Sandbox token URL
   const response = await axios.get(
-    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
     {
       headers: {
         Authorization: `Basic ${auth}`,
@@ -28,14 +29,15 @@ export default async function handler(req, res) {
     const accessToken = await getAccessToken();
 
     const registerPayload = {
-      ShortCode: process.env.SHORTCODE, // e.g. 600XXX for sandbox
+      ShortCode: process.env.SHORTCODE || "600000", // ✅ sandbox Paybill
       ResponseType: "Completed",
-      ConfirmationURL: `${process.env.BASE_URL}/api/confirmation`,
-      ValidationURL: `${process.env.BASE_URL}/api/validation`,
+      ConfirmationURL: `${process.env.BASE_URL}/api/c2b/confirmation`,
+      ValidationURL: `${process.env.BASE_URL}/api/c2b/validation`,
     };
 
+    // ✅ Sandbox C2B register URL
     const response = await axios.post(
-      "https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl",
+      "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl",
       registerPayload,
       {
         headers: {
