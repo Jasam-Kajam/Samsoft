@@ -25,8 +25,8 @@ export default async function handler(req, res) {
     const registerPayload = {
       ShortCode: process.env.SHORTCODE,
       ResponseType: "Completed",
-      ConfirmationURL: `${process.env.BASE_URL}/api/mpesa/confirmation`,
-      ValidationURL: `${process.env.BASE_URL}/api/mpesa/validation`,
+      ConfirmationURL: `${process.env.BASE_URL}/api/confirmation`,
+      ValidationURL: `${process.env.BASE_URL}/api/validation`,
     };
 
     const response = await axios.post(
