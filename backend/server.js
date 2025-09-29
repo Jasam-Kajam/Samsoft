@@ -71,7 +71,7 @@ app.post("/stkpush", async (req, res) => {
       }
     );
 
-    res.status(200).json({ message: " Confirm ", data: response.data });
+    res.status(200).json({ message: " 𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐀𝐘𝐌𝐄𝐍𝐓 ", data: response.data });
   } catch (err) {
     const errorDetails = err.response?.data || err.message;
     console.error("❌ STK push failed:", errorDetails);
