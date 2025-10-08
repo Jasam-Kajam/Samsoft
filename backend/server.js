@@ -11,12 +11,16 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ type: "*/*" })); // handle all JSON content types
 
+// ==========================
 // Get M-PESA Access Token
+// ==========================
 async function getAccessToken() {
   try {
-    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+    const auth = Buffer.from(
+      `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
+    ).toString("base64");
 
     const response = await axios.get(
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
@@ -29,12 +33,17 @@ async function getAccessToken() {
 
     return response.data.access_token;
   } catch (error) {
-    console.error("🔐 Failed to fetch access token:", error.response?.data || error.message);
+    console.error(
+      "🔐 Failed to fetch access token:",
+      error.response?.data || error.message
+    );
     throw new Error("Access token fetch failed");
   }
 }
 
-// STK Push Endpoint
+// ==========================
+// STK Push Endpoint (Buy Goods)
+// ==========================
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
@@ -43,21 +52,42 @@ app.post("/stkpush", async (req, res) => {
       return res.status(400).json({ error: "Phone and amount are required" });
     }
 
+    // ✅ Sanitize phone number (Safaricom expects 2547XXXXXXXX format)
+    let phoneNumber = phone;
+    if (phone.startsWith("0")) {
+      phoneNumber = "254" + phone.slice(1);
+    } else if (phone.startsWith("+")) {
+      phoneNumber = phone.replace("+", "");
+    }
+
     const access_token = await getAccessToken();
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
-    const password = Buffer.from(`${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`).toString("base64");
+
+    // ✅ Generate Safaricom timestamp (Kenya local time)
+    const pad = (n) => (n < 10 ? "0" + n : n);
+    const now = new Date();
+    const timestamp =
+      now.getFullYear().toString() +
+      pad(now.getMonth() + 1) +
+      pad(now.getDate()) +
+      pad(now.getHours()) +
+      pad(now.getMinutes()) +
+      pad(now.getSeconds());
+
+    const password = Buffer.from(
+      `${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`
+    ).toString("base64");
 
     const stkRequest = {
-      BusinessShortCode: process.env.SHORTCODE,
+      BusinessShortCode: process.env.SHORTCODE,   // Till Number or Shortcode
       Password: password,
       Timestamp: timestamp,
-      TransactionType: "CustomerBuyGoodsOnline",
+      TransactionType: "CustomerBuyGoodsOnline",  // ✅ Correct for Buy Goods
       Amount: amount,
-      PartyA: phone,
-      PartyB: process.env.TILL_NUMBER,
-      PhoneNumber: phone,
+      PartyA: phoneNumber,
+      PartyB: process.env.TILL_NUMBER,            // ✅ Till Number
+      PhoneNumber: phoneNumber,
       CallBackURL: process.env.CALLBACK_URL,
-      AccountReference: "",
+      AccountReference: phoneNumber,              // ✅ Required
       TransactionDesc: "BUNDLES",
     };
 
@@ -71,7 +101,10 @@ app.post("/stkpush", async (req, res) => {
       }
     );
 
-    res.status(200).json({ message: " 𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐀𝐘𝐌𝐄𝐍𝐓 ", data: response.data });
+    res.status(200).json({
+      message: "𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐀𝐘𝐌𝐄𝐍𝐓",
+      data: response.data,
+    });
   } catch (err) {
     const errorDetails = err.response?.data || err.message;
     console.error("❌ STK push failed:", errorDetails);
@@ -79,22 +112,45 @@ app.post("/stkpush", async (req, res) => {
   }
 });
 
+// ==========================
 // M-PESA Callback Handler
+// ==========================
 app.post("/mpesa/callback", (req, res) => {
-  const callback = req.body?.Body?.stkCallback;
-  console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
+  try {
+    const callback = req.body?.Body?.stkCallback;
+    console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
 
-  if (callback?.ResultCode === 0) {
-    console.log("✅ Payment Successful");
-    // TODO: Save to DB or deliver bundle
-  } else {
-    console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
+    if (callback?.ResultCode === 0) {
+      console.log("✅ Payment Successful");
+
+      // Extract transaction details
+      const metadata = callback.CallbackMetadata?.Item || [];
+      const amount = metadata.find((item) => item.Name === "Amount")?.Value;
+      const mpesaReceipt = metadata.find((item) => item.Name === "MpesaReceiptNumber")?.Value;
+      const phoneNumber = metadata.find((item) => item.Name === "PhoneNumber")?.Value;
+      const transactionDate = metadata.find((item) => item.Name === "TransactionDate")?.Value;
+
+      console.log("📄 Payment Details:");
+      console.log(" - Amount:", amount);
+      console.log(" - MpesaReceiptNumber:", mpesaReceipt);
+      console.log(" - Phone:", phoneNumber);
+      console.log(" - Date:", transactionDate);
+
+      // TODO: Save to DB or trigger service (e.g., deliver bundles)
+    } else {
+      console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
+    }
+
+    res.sendStatus(200); // ✅ Always respond 200 to prevent retries
+  } catch (error) {
+    console.error("⚠️ Error handling callback:", error.message);
+    res.sendStatus(500);
   }
-
-  res.sendStatus(200); // Respond with 200 to prevent retries
 });
 
+// ==========================
 // Start Server
+// ==========================
 app.listen(port, () => {
   console.log(`🚀 Server running on http://localhost:${port}`);
-});  
+});
