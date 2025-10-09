@@ -1,156 +1,127 @@
-// backend/server.js
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const dotenv = require("dotenv");
+// stkpush-server.js
+import express from "express";
+import axios from "axios";
+import bodyParser from "body-parser";
+import dotenv from "dotenv";
 
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 10000;
+const port = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(bodyParser.json({ type: "*/*" })); // handle all JSON content types
+app.use(bodyParser.json());
 
 // ==========================
-// Get M-PESA Access Token
+// Token cache
 // ==========================
+let tokenCache = { token: null, expiresAt: 0 };
+
 async function getAccessToken() {
-  try {
-    const auth = Buffer.from(
-      `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
-    ).toString("base64");
-
-    const response = await axios.get(
-      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-      {
-        headers: {
-          Authorization: `Basic ${auth}`,
-        },
-      }
-    );
-
-    return response.data.access_token;
-  } catch (error) {
-    console.error(
-      "🔐 Failed to fetch access token:",
-      error.response?.data || error.message
-    );
-    throw new Error("Access token fetch failed");
+  if (tokenCache.token && Date.now() < tokenCache.expiresAt) {
+    return tokenCache.token;
   }
+
+  const auth = Buffer.from(
+    `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
+  ).toString("base64");
+
+  const url = "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
+
+  const resp = await axios.get(url, {
+    headers: { Authorization: `Basic ${auth}` },
+    timeout: 10000,
+  });
+
+  const { access_token, expires_in } = resp.data;
+  tokenCache = {
+    token: access_token,
+    expiresAt: Date.now() + (Number(expires_in) - 30) * 1000,
+  };
+
+  return access_token;
 }
 
 // ==========================
-// STK Push Endpoint (Buy Goods)
+// Helpers
+// ==========================
+const pad = (n) => (n < 10 ? "0" + n : n);
+
+function generateTimestamp() {
+  const now = new Date();
+  return (
+    now.getFullYear().toString() +
+    pad(now.getMonth() + 1) +
+    pad(now.getDate()) +
+    pad(now.getHours()) +
+    pad(now.getMinutes()) +
+    pad(now.getSeconds())
+  );
+}
+
+function formatPhone(phone) {
+  if (!phone) return null;
+  if (phone.startsWith("+")) return phone.slice(1);
+  if (phone.startsWith("0")) return "254" + phone.slice(1);
+  return phone;
+}
+
+// ==========================
+// STK Push Endpoint
 // ==========================
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
-
     if (!phone || !amount) {
-      return res.status(400).json({ error: "Phone and amount are required" });
+      return res.status(400).json({ error: "phone and amount are required" });
     }
 
-    // ✅ Sanitize phone number (Safaricom expects 2547XXXXXXXX format)
-    let phoneNumber = phone;
-    if (phone.startsWith("0")) {
-      phoneNumber = "254" + phone.slice(1);
-    } else if (phone.startsWith("+")) {
-      phoneNumber = phone.replace("+", "");
+    const phoneNumber = formatPhone(phone);
+    if (!/^2547\d{8}$/.test(phoneNumber)) {
+      return res.status(400).json({ error: "Invalid phone number format" });
     }
 
-    const access_token = await getAccessToken();
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ error: "Invalid amount" });
+    }
 
-    // ✅ Generate Safaricom timestamp (Kenya local time)
-    const pad = (n) => (n < 10 ? "0" + n : n);
-    const now = new Date();
-    const timestamp =
-      now.getFullYear().toString() +
-      pad(now.getMonth() + 1) +
-      pad(now.getDate()) +
-      pad(now.getHours()) +
-      pad(now.getMinutes()) +
-      pad(now.getSeconds());
-
+    const token = await getAccessToken();
+    const timestamp = generateTimestamp();
     const password = Buffer.from(
       `${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`
     ).toString("base64");
 
     const stkRequest = {
-      BusinessShortCode: process.env.SHORTCODE,   // Till Number or Shortcode
+      BusinessShortCode: process.env.SHORTCODE,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: "CustomerBuyGoodsOnline",  // ✅ Correct for Buy Goods
-      Amount: amount,
+      TransactionType: "CustomerBuyGoodsOnline",
+      Amount: numericAmount,
       PartyA: phoneNumber,
-      PartyB: process.env.TILL_NUMBER,            // ✅ Till Number
+      PartyB: process.env.TILL_NUMBER,
       PhoneNumber: phoneNumber,
       CallBackURL: process.env.CALLBACK_URL,
-      AccountReference: phoneNumber,              // ✅ Required
-      TransactionDesc: "BUNDLES",
+      AccountReference: phoneNumber,
+      TransactionDesc: "Payment",
     };
 
-    const response = await axios.post(
+    const resp = await axios.post(
       "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
       stkRequest,
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
     );
 
-    res.status(200).json({
-      message: "Confirm Payment",
-      data: response.data,
-    });
+    res.json({ message: "STK Push initiated", data: resp.data });
   } catch (err) {
-    const errorDetails = err.response?.data || err.message;
-    console.error("❌ STK push failed:", errorDetails);
-    res.status(500).json({ error: "STK Push failed", details: errorDetails });
+    const details = err.response?.data || err.message;
+    console.error("STK Push failed:", details);
+    res.status(500).json({ error: "STK Push failed", details });
   }
 });
 
 // ==========================
-// M-PESA Callback Handler
-// ==========================
-app.post("/mpesa/callback", (req, res) => {
-  try {
-    const callback = req.body?.Body?.stkCallback;
-    console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
-
-    if (callback?.ResultCode === 0) {
-      console.log("✅ Payment Successful");
-
-      // Extract transaction details
-      const metadata = callback.CallbackMetadata?.Item || [];
-      const amount = metadata.find((item) => item.Name === "Amount")?.Value;
-      const mpesaReceipt = metadata.find((item) => item.Name === "MpesaReceiptNumber")?.Value;
-      const phoneNumber = metadata.find((item) => item.Name === "PhoneNumber")?.Value;
-      const transactionDate = metadata.find((item) => item.Name === "TransactionDate")?.Value;
-
-      console.log("📄 Payment Details:");
-      console.log(" - Amount:", amount);
-      console.log(" - MpesaReceiptNumber:", mpesaReceipt);
-      console.log(" - Phone:", phoneNumber);
-      console.log(" - Date:", transactionDate);
-
-      // TODO: Save to DB or trigger service (e.g., deliver bundles)
-    } else {
-      console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
-    }
-
-    res.sendStatus(200); // ✅ Always respond 200 to prevent retries
-  } catch (error) {
-    console.error("⚠️ Error handling callback:", error.message);
-    res.sendStatus(500);
-  }
-});
-
-// ==========================
-// Start Server
+// Start server
 // ==========================
 app.listen(port, () => {
-  console.log(`🚀 Server running on http://localhost:${port}`);
+  console.log(`🚀 STK Push server running on http://localhost:${port}`);
 });
