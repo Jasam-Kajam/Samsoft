@@ -102,7 +102,7 @@ app.post("/stkpush", async (req, res) => {
     );
 
     res.status(200).json({
-      message: "𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐀𝐘𝐌𝐄𝐍𝐓",
+      message: "Confirm Payment",
       data: response.data,
     });
   } catch (err) {
