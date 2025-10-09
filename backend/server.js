@@ -37,7 +37,7 @@ async function getAccessToken() {
       "🔐 Failed to fetch access token:",
       error.response?.data || error.message
     );
-    throw new Error("Access token fetch failed");
+    throw new Error("Access tooooken fetch failed");
   }
 }
 
