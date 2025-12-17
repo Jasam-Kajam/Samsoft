@@ -11,56 +11,41 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.use(cors());
-app.use(bodyParser.json({ type: "*/*" }));
+app.use(bodyParser.json());
 
 // Get M-PESA Access Token
 async function getAccessToken() {
   try {
-    const auth = Buffer.from(
-      `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
-    ).toString("base64");
+    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
 
     const response = await axios.get(
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-      { headers: { Authorization: `Basic ${auth}` } }
+      {
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      }
     );
 
     return response.data.access_token;
   } catch (error) {
+    console.error("🔐 Failed to fetch access token:", error.response?.data || error.message);
     throw new Error("Access token fetch failed");
   }
 }
 
-// STK Push Endpoint (Buy Goods)
+// STK Push Endpoint
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
+
     if (!phone || !amount) {
       return res.status(400).json({ error: "Phone and amount are required" });
     }
 
-    let phoneNumber = phone;
-    if (phone.startsWith("0")) {
-      phoneNumber = "254" + phone.slice(1);
-    } else if (phone.startsWith("+")) {
-      phoneNumber = phone.replace("+", "");
-    }
-
     const access_token = await getAccessToken();
-
-    const pad = (n) => (n < 10 ? "0" + n : n);
-    const now = new Date();
-    const timestamp =
-      now.getFullYear().toString() +
-      pad(now.getMonth() + 1) +
-      pad(now.getDate()) +
-      pad(now.getHours()) +
-      pad(now.getMinutes()) +
-      pad(now.getSeconds());
-
-    const password = Buffer.from(
-      `${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`
-    ).toString("base64");
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+    const password = Buffer.from(`${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`).toString("base64");
 
     const stkRequest = {
       BusinessShortCode: process.env.SHORTCODE,
@@ -68,49 +53,48 @@ app.post("/stkpush", async (req, res) => {
       Timestamp: timestamp,
       TransactionType: "CustomerBuyGoodsOnline",
       Amount: amount,
-      PartyA: phoneNumber,
+      PartyA: phone,
       PartyB: process.env.TILL_NUMBER,
-      PhoneNumber: phoneNumber,
+      PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
-      AccountReference: phoneNumber,
+      AccountReference: "",
       TransactionDesc: "BUNDLES",
     };
 
     const response = await axios.post(
       "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
       stkRequest,
-      { headers: { Authorization: `Bearer ${access_token}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
     );
 
-    res.status(200).json({
-      message: "Confirm Payment",
-      data: response.data,
-    });
+    res.status(200).json({ message: " 𝐂𝐎𝐍𝐅𝐈𝐑𝐌 𝐏𝐀𝐘𝐌𝐄𝐍𝐓 ", data: response.data });
   } catch (err) {
     const errorDetails = err.response?.data || err.message;
+    console.error("❌ STK push failed:", errorDetails);
     res.status(500).json({ error: "STK Push failed", details: errorDetails });
   }
 });
 
 // M-PESA Callback Handler
 app.post("/mpesa/callback", (req, res) => {
-  try {
-    const callback = req.body?.Body?.stkCallback;
+  const callback = req.body?.Body?.stkCallback;
+  console.log("📞 M-PESA Callback Received:\n", JSON.stringify(callback, null, 2));
 
-    if (callback?.ResultCode === 0) {
-      const metadata = callback.CallbackMetadata?.Item || [];
-      const amount = metadata.find((item) => item.Name === "Amount")?.Value;
-      const mpesaReceipt = metadata.find((item) => item.Name === "MpesaReceiptNumber")?.Value;
-      const phoneNumber = metadata.find((item) => item.Name === "PhoneNumber")?.Value;
-      const transactionDate = metadata.find((item) => item.Name === "TransactionDate")?.Value;
-
-      // Save to DB or trigger service with { amount, mpesaReceipt, phoneNumber, transactionDate }
-    }
-    res.sendStatus(200);
-  } catch {
-    res.sendStatus(500);
+  if (callback?.ResultCode === 0) {
+    console.log("✅ Payment Successful");
+    // TODO: Save to DB or deliver bundle
+  } else {
+    console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
   }
+
+  res.sendStatus(200); // Respond with 200 to prevent retries
 });
 
 // Start Server
-app.listen(port); 
+app.listen(port, () => {
+  console.log(`🚀 Server running on http://localhost:${port}`);
+}); 
