@@ -2,8 +2,8 @@ import axios from "axios";
 import btoa from "btoa";
 
 // === STEP 1: Enter your sandbox credentials ===
-const consumerKey = "YOUR_CONSUMER_KEY";
-const consumerSecret = "YOUR_CONSUMER_SECRET";
+const consumerKey = "189PZFAVBiIv1e0hWTRuAWtPGR68YSkjmLhFSppwyVT1ePvd";
+const consumerSecret = "rGwtyv8ANvgmunzMH7Gi1yy58dSfAdzd4Uucdq1ov61EnYNuivrZIJ72UYQVVhN4";
 
 // Your Vercel endpoints
 const validationURL = "https://samsoft-coral.vercel.app/api/validation";
