@@ -34,8 +34,8 @@ export default async function handler(req, res) {
     const registerPayload = {
       ShortCode: process.env.SHORTCODE,
       ResponseType: "Completed",
-      ConfirmationURL: "https://samsoft-coral.vercel.app/api/c2b/confirmation",
-      ValidationURL: "https://samsoft-coral.vercel.app/api/c2b/validation",
+      ConfirmationURL: "https://samsoft-coral.vercel.app/api/confirmation",
+      ValidationURL: "https://samsoft-coral.vercel.app/api/validation",
     };
 
     const response = await axios.post(
