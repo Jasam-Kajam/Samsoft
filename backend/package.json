@@ -1,7 +1,6 @@
 {
   "name": "quicktel-bundles",
   "version": "1.0.0",
-  "description": "Safaricom STK Push Serverless Backend",
   "type": "module",
   "private": true,
   "dependencies": {
