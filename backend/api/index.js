@@ -1,11 +1,8 @@
-// backend/server.js
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-require("dotenv").config();
 
 const app = express();
-const port = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
@@ -30,7 +27,10 @@ async function getAccessToken() {
 
     return response.data.access_token;
   } catch (error) {
-    console.error("🔐 Failed to fetch access token:", error.response?.data || error.message);
+    console.error(
+      "🔐 Failed to fetch access token:",
+      error.response?.data || error.message
+    );
     throw new Error("Access token fetch failed");
   }
 }
@@ -38,7 +38,7 @@ async function getAccessToken() {
 // =============================
 // STK PUSH ENDPOINT
 // =============================
-app.post("/stkpush", async (req, res) => {
+app.post("/api/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
 
@@ -95,7 +95,7 @@ app.post("/stkpush", async (req, res) => {
 // =============================
 // CALLBACK HANDLER
 // =============================
-app.post("/mpesa/callback", (req, res) => {
+app.post("/api/mpesa/callback", (req, res) => {
   const callback = req.body?.Body?.stkCallback;
 
   console.log("📞 M-PESA Callback Received:");
@@ -103,11 +103,15 @@ app.post("/mpesa/callback", (req, res) => {
 
   if (callback?.ResultCode === 0) {
     console.log("✅ Payment Successful");
-    // TODO: Save transaction to DB
+    // TODO: Save to DB
   } else {
     console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
   }
 
-  res.sendStatus(200); // Important to prevent Safaricom retries
+  res.sendStatus(200);
 });
 
+// =============================
+// EXPORT FOR VERCEL
+// =============================
+module.exports = app;
