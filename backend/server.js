@@ -111,9 +111,3 @@ app.post("/mpesa/callback", (req, res) => {
   res.sendStatus(200); // Important to prevent Safaricom retries
 });
 
-// =============================
-// START SERVER
-// =============================
-app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
-}); 
