@@ -75,4 +75,4 @@ export default async function handler(req, res) {
     console.error("❌ STK push failed:", errorDetails);
     res.status(500).json({ error: "STK Push failed", details: errorDetails });
   }
-}
+} 
