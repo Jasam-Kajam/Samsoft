@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -19,10 +20,12 @@ async function getAccessToken() {
       { headers: { Authorization: `Basic ${auth}` } }
     );
 
-    console.log("✅ Access token fetched successfully");
+    console.log("✅ Access token fetched:", response.data.access_token);
     return response.data.access_token;
   } catch (err) {
-    console.error("❌ Failed to fetch access token:", err.response?.data || err.message);
+    console.error("❌ Failed to fetch access token");
+    console.error("Status:", err.response?.status || "No response");
+    console.error("Data:", err.response?.data || err.message);
     throw new Error("Access token fetch failed");
   }
 }
@@ -47,7 +50,7 @@ app.post("/stkpush", async (req, res) => {
       TransactionType: "CustomerBuyGoodsOnline",
       Amount: amount,
       PartyA: phone,
-      PartyB: process.env.TILL_NUMBER, // Your live Till or shortcode
+      PartyB: process.env.TILL_NUMBER, // Production Till or shortcode
       PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
       AccountReference: "Quicktel",
