@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -9,87 +8,96 @@ app.use(cors());
 app.use(express.json());
 
 // =============================
-// GET M-PESA ACCESS TOKEN
+// GET ACCESS TOKEN
 // =============================
 async function getAccessToken() {
   try {
-    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+    const auth = Buffer.from(
+      `${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`
+    ).toString("base64");
 
     const response = await axios.get(
       "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-      { headers: { Authorization: `Basic ${auth}` } }
+      {
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      }
     );
 
-    console.log("✅ Access token fetched:", response.data.access_token);
     return response.data.access_token;
-  } catch (err) {
-    console.error("❌ Failed to fetch access token");
-    console.error("Status:", err.response?.status || "No response");
-    console.error("Data:", err.response?.data || err.message);
-    throw new Error("Access token fetch failed");
+  } catch (error) {
+    console.error("Access Token Error:", error.response?.data || error.message);
+    throw error;
   }
 }
 
 // =============================
-// STK PUSH Endpoint
+// STK PUSH
 // =============================
 app.post("/stkpush", async (req, res) => {
   try {
     const { phone, amount } = req.body;
-    if (!phone || !amount) return res.status(400).json({ error: "Phone and amount required" });
 
-    const access_token = await getAccessToken();
+    if (!phone || !amount) {
+      return res.status(400).json({ error: "Phone and amount required" });
+    }
 
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
-    const password = Buffer.from(`${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`).toString("base64");
+    const accessToken = await getAccessToken();
 
-    const stkRequest = {
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[^0-9]/g, "")
+      .slice(0, 14);
+
+    const password = Buffer.from(
+      `${process.env.SHORTCODE}${process.env.PASSKEY}${timestamp}`
+    ).toString("base64");
+
+    const stkData = {
       BusinessShortCode: process.env.SHORTCODE,
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerBuyGoodsOnline",
       Amount: amount,
       PartyA: phone,
-      PartyB: process.env.TILL_NUMBER, // Production Till or shortcode
+      PartyB: process.env.TILL_NUMBER,
       PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
       AccountReference: "Quicktel",
-      TransactionDesc: "BUNDLES",
+      TransactionDesc: "Bundle Payment",
     };
 
     const response = await axios.post(
       "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-      stkRequest,
-      { headers: { Authorization: `Bearer ${access_token}` } }
+      stkData,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
     );
 
-    res.status(200).json({ message: "✅ Confirm payment on your phone", data: response.data });
-
-  } catch (err) {
-    console.error("❌ STK Push failed:", err.response?.data || err.message);
-    res.status(500).json({ error: "STK Push failed", details: err.response?.data || err.message });
+    res.json(response.data);
+  } catch (error) {
+    console.error("STK Push Error:", error.response?.data || error.message);
+    res.status(500).json({
+      error: "STK Push failed",
+      details: error.response?.data || error.message,
+    });
   }
 });
 
 // =============================
-// Callback Endpoint
+// CALLBACK
 // =============================
 app.post("/mpesa/callback", (req, res) => {
-  const callback = req.body?.Body?.stkCallback;
-  console.log("📩 M-PESA Callback:", JSON.stringify(callback, null, 2));
-
-  if (callback?.ResultCode === 0) {
-    console.log("✅ Payment Successful");
-    // TODO: Save transaction to DB
-  } else {
-    console.log(`❌ Payment Failed: ${callback?.ResultDesc}`);
-  }
-
+  console.log("Callback Received:", JSON.stringify(req.body, null, 2));
   res.sendStatus(200);
 });
 
 // =============================
-// Start Server
-// =============================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
