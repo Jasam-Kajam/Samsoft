@@ -43,7 +43,7 @@ app.post("/stkpush", async (req, res) => {
       TransactionType: "CustomerBuyGoodsOnline",
       Amount: amount,
       PartyA: phone,
-      PartyB: process.env.SHORTCODE,
+      PartyB: process.env.TILL_NUMBER,
       PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
       AccountReference: "Quicktel",
