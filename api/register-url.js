@@ -1,33 +1,11 @@
-// api/register-url.js
-//
-// Safaricom Daraja C2B Register URL
-//
-// Endpoint:
-// POST https://samsoft-coral.vercel.app/api/register-url
-//
-// Vercel Environment Variables:
-// CONSUMER_KEY
-// CONSUMER_SECRET
-// SHORTCODE
-
 export default async function handler(req, res) {
-
-  // --------------------------------------------------
-  // METHOD CHECK
-  // --------------------------------------------------
-
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      message: "Method not allowed. Send a POST request."
-    });
-  }
-
   try {
-
-    // --------------------------------------------------
-    // ENVIRONMENT VARIABLES
-    // --------------------------------------------------
+    if (req.method !== "POST") {
+      return res.status(405).json({
+        success: false,
+        message: "Use POST /api/register-url"
+      });
+    }
 
     const {
       CONSUMER_KEY,
@@ -38,40 +16,30 @@ export default async function handler(req, res) {
     if (!CONSUMER_KEY) {
       return res.status(500).json({
         success: false,
-        message: "CONSUMER_KEY is missing."
+        message: "CONSUMER_KEY is missing"
       });
     }
 
     if (!CONSUMER_SECRET) {
       return res.status(500).json({
         success: false,
-        message: "CONSUMER_SECRET is missing."
+        message: "CONSUMER_SECRET is missing"
       });
     }
 
     if (!SHORTCODE) {
       return res.status(500).json({
         success: false,
-        message: "SHORTCODE is missing."
+        message: "SHORTCODE is missing"
       });
     }
-
-    // --------------------------------------------------
-    // SAFARICOM PRODUCTION API
-    // --------------------------------------------------
-
-    const BASE_URL = "https://api.safaricom.co.ke";
-
-    // --------------------------------------------------
-    // GENERATE ACCESS TOKEN
-    // --------------------------------------------------
 
     const credentials = Buffer
       .from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`)
       .toString("base64");
 
     const tokenResponse = await fetch(
-      `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
       {
         method: "GET",
         headers: {
@@ -88,55 +56,42 @@ export default async function handler(req, res) {
       tokenData = JSON.parse(tokenText);
     } catch {
       tokenData = {
-        rawResponse: tokenText
+        raw: tokenText
       };
     }
 
-    if (!tokenResponse.ok || !tokenData.access_token) {
-
-      console.error(
-        "Safaricom OAuth error:",
-        tokenData
-      );
-
+    if (!tokenResponse.ok) {
       return res.status(502).json({
         success: false,
-        message: "Failed to obtain Safaricom access token.",
-        safaricom: tokenData
+        message: "Safaricom token request failed",
+        response: tokenData
       });
     }
 
-    // --------------------------------------------------
-    // CALLBACK URLS
-    // --------------------------------------------------
+    if (!tokenData.access_token) {
+      return res.status(502).json({
+        success: false,
+        message: "Safaricom did not return an access token",
+        response: tokenData
+      });
+    }
 
-    const confirmationURL =
+    const callbackURL =
       "https://samsoft-coral.vercel.app/api/callback";
-
-    const validationURL =
-      "https://samsoft-coral.vercel.app/api/callback";
-
-    // --------------------------------------------------
-    // REGISTER C2B URLS
-    // --------------------------------------------------
 
     const registerResponse = await fetch(
-      `${BASE_URL}/mpesa/c2b/v2/registerurl`,
+      "https://api.safaricom.co.ke/mpesa/c2b/v2/registerurl",
       {
         method: "POST",
-
         headers: {
-          Authorization:
-            `Bearer ${tokenData.access_token}`,
-
+          Authorization: `Bearer ${tokenData.access_token}`,
           "Content-Type": "application/json"
         },
-
         body: JSON.stringify({
           ShortCode: SHORTCODE,
           ResponseType: "Completed",
-          ConfirmationURL: confirmationURL,
-          ValidationURL: validationURL
+          ConfirmationURL: callbackURL,
+          ValidationURL: callbackURL
         })
       }
     );
@@ -150,52 +105,26 @@ export default async function handler(req, res) {
       registerData = JSON.parse(registerText);
     } catch {
       registerData = {
-        rawResponse: registerText
+        raw: registerText
       };
     }
 
-    console.log(
-      "Safaricom Register URL response:",
-      registerData
-    );
-
-    // --------------------------------------------------
-    // SAFARICOM RESPONSE
-    // --------------------------------------------------
-
-    if (!registerResponse.ok) {
-      return res.status(registerResponse.status).json({
-        success: false,
-        message:
-          "Safaricom rejected the URL registration.",
-        safaricom: registerData
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Safaricom URLs registered successfully.",
-
-      shortcode: SHORTCODE,
-
-      confirmationURL,
-
-      validationURL,
-
-      safaricom: registerData
+    return res.status(
+      registerResponse.ok ? 200 : registerResponse.status
+    ).json({
+      success: registerResponse.ok,
+      message: registerResponse.ok
+        ? "Register URL request completed"
+        : "Safaricom rejected the registration",
+      response: registerData
     });
 
   } catch (error) {
-
-    console.error(
-      "Register URL error:",
-      error
-    );
+    console.error("REGISTER URL ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error.",
+      message: "Function execution failed",
       error: error.message
     });
   }
