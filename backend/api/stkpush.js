@@ -173,7 +173,7 @@ module.exports = async function handler(req, res) {
 
             Amount: paymentAmount,
             PartyA: phoneNumber,
-            PartyB: shortcode,
+            PartyB: process.env.TILL_NUMBER,
             PhoneNumber: phoneNumber,
             CallBackURL: callbackURL,
             AccountReference: "Quicktel",
