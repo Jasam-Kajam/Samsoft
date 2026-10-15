@@ -1,18 +1,22 @@
 export default function handler(req, res) {
-  if (req.method === "POST") {
-    console.log("Validation Payload:", req.body);
-
-    // Example logic: accept all transactions
-    res.status(200).json({
-      ResultCode: 0,
-      ResultDesc: "Accepted"
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      ResultCode: 1,
+      ResultDesc: "Method Not Allowed"
     });
-
-    // Or apply custom rules:
-    // let resultCode = req.body.Amount <= 10000 ? 0 : 1;
-    // let resultDesc = resultCode === 0 ? "Accepted" : "Rejected";
-    // res.status(200).json({ ResultCode: resultCode, ResultDesc: resultDesc });
-  } else {
-    res.status(405).send("Method Not Allowed");
   }
+
+  const payload = req.body || {};
+
+  console.log("C2B validation received", {
+    TransID: payload.TransID,
+    TransAmount: payload.TransAmount,
+    BillRefNumber: payload.BillRefNumber
+  });
+
+  // Accept the payment request.
+  return res.status(200).json({
+    ResultCode: 0,
+    ResultDesc: "Accepted"
+  });
 }
