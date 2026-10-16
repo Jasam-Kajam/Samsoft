@@ -13,6 +13,44 @@ const REQUEST_TIMEOUT = 30000;
 const MAX_AMOUNT = 250000;
 
 // ======================================================
+// CORS CONFIGURATION
+// ======================================================
+
+function configureCors(req, res) {
+    const configuredOrigins = (
+        process.env.ALLOWED_ORIGINS || ""
+    )
+        .split(",")
+        .map(origin => origin.trim())
+        .filter(Boolean);
+
+    const origin = req.headers.origin;
+
+    // Postman and server-to-server requests may not send Origin.
+    if (!origin) {
+        res.setHeader("Vary", "Origin");
+        return true;
+    }
+
+    // Only allow explicitly configured website origins.
+    if (!configuredOrigins.includes(origin)) {
+        res.setHeader("Vary", "Origin");
+        return false;
+    }
+
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization"
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    res.setHeader("Vary", "Origin");
+
+    return true;
+}
+
+// ======================================================
 // NORMALIZE KENYAN PHONE NUMBER
 // ======================================================
 
@@ -101,7 +139,7 @@ async function getAccessToken() {
         }
     );
 
-    if (!response.data || !response.data.access_token) {
+    if (!response.data?.access_token) {
         throw new Error(
             "Safaricom did not return an access token."
         );
@@ -119,10 +157,7 @@ function getSafaricomError(error) {
 
     if (data && typeof data === "object") {
         return {
-            errorCode:
-                data.errorCode ||
-                data.code ||
-                null,
+            errorCode: data.errorCode || data.code || null,
 
             errorMessage:
                 data.errorMessage ||
@@ -135,8 +170,7 @@ function getSafaricomError(error) {
                 data.requestID ||
                 null,
 
-            httpStatus:
-                error.response?.status || null
+            httpStatus: error.response?.status || null
         };
     }
 
@@ -155,11 +189,32 @@ module.exports = async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
 
     // --------------------------------------------------
+    // CORS
+    // --------------------------------------------------
+
+    const corsAllowed = configureCors(req, res);
+
+    if (!corsAllowed) {
+        return res.status(403).json({
+            success: false,
+            error: "Origin not allowed."
+        });
+    }
+
+    // --------------------------------------------------
+    // PREFLIGHT REQUEST
+    // --------------------------------------------------
+
+    if (req.method === "OPTIONS") {
+        return res.status(204).end();
+    }
+
+    // --------------------------------------------------
     // HTTP METHOD
     // --------------------------------------------------
 
     if (req.method !== "POST") {
-        res.setHeader("Allow", "POST");
+        res.setHeader("Allow", "POST, OPTIONS");
 
         return res.status(405).json({
             success: false,
@@ -295,15 +350,6 @@ module.exports = async function handler(req, res) {
         // --------------------------------------------------
         // TRANSACTION CONFIGURATION
         // --------------------------------------------------
-        //
-        // CustomerBuyGoodsOnline is for the applicable
-        // Buy Goods configuration.
-        //
-        // Confirm your Daraja account supports this type
-        // and that SHORTCODE, PASSKEY and PartyB match
-        // the registered configuration.
-        //
-        // --------------------------------------------------
 
         const transactionType =
             process.env.TRANSACTION_TYPE ||
@@ -350,7 +396,6 @@ module.exports = async function handler(req, res) {
         } catch (error) {
             const details = getSafaricomError(error);
 
-            // Never log passwords, access tokens or secrets.
             console.error("Safaricom STK Push rejected:", {
                 httpStatus: details.httpStatus,
                 errorCode: details.errorCode,
@@ -384,16 +429,12 @@ module.exports = async function handler(req, res) {
             checkoutRequestId: data.CheckoutRequestID || null
         });
 
-        // Safaricom ResponseCode 0 means the request was
-        // accepted for processing, not that payment succeeded.
-
         if (String(data.ResponseCode) !== "0") {
             return res.status(502).json({
                 success: false,
                 error:
                     data.ResponseDescription ||
-                    "Safaricom did not accept the STK Push request.",
-                data
+                    "Safaricom did not accept the STK Push request."
             });
         }
 
@@ -407,16 +448,23 @@ module.exports = async function handler(req, res) {
                 data.CustomerMessage ||
                 "Payment request sent. Check your phone to complete the payment.",
             data: {
-                MerchantRequestID: data.MerchantRequestID || null,
-                CheckoutRequestID: data.CheckoutRequestID || null,
+                MerchantRequestID:
+                    data.MerchantRequestID || null,
+
+                CheckoutRequestID:
+                    data.CheckoutRequestID || null,
+
                 ResponseCode: data.ResponseCode,
-                ResponseDescription: data.ResponseDescription || null,
-                CustomerMessage: data.CustomerMessage || null
+
+                ResponseDescription:
+                    data.ResponseDescription || null,
+
+                CustomerMessage:
+                    data.CustomerMessage || null
             }
         });
 
     } catch (error) {
-        // Do not log credentials, tokens, or passwords.
         console.error("STK Push backend error:", {
             message: error.message,
             code: error.code || null
@@ -424,8 +472,7 @@ module.exports = async function handler(req, res) {
 
         return res.status(500).json({
             success: false,
-            error: "An internal error occurred while initiating the payment.",
-            message: error.message || "Unknown server error."
+            error: "An internal error occurred while initiating the payment."
         });
     }
 };
