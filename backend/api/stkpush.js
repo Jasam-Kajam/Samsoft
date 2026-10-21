@@ -1,4 +1,3 @@
-
 "use strict";
 
 /**
@@ -14,8 +13,8 @@
  * Transaction: CustomerBuyGoodsOnline
  *
  * Required environment variables:
- *   CONSUMER_KEY
- *   CONSUMER_SECRET
+ *   CONSAMER_KEY
+ *   CONSAMER_SECRET
  *   SHORTCODE
  *   TILL_NUMBER
  *   PASSKEY
@@ -169,8 +168,8 @@ function getTimestamp() {
 
 function getConfigurationError() {
     const required = [
-        "CONSUMER_KEY",
-        "CONSUMER_SECRET",
+        "CONSAMER_KEY",
+        "CONSAMER_SECRET",
         "SHORTCODE",
         "TILL_NUMBER",
         "PASSKEY",
@@ -261,8 +260,8 @@ async function fetchJson(url, options) {
 // ============================================================
 
 async function getAccessToken() {
-    const consumerKey = process.env.CONSUMER_KEY.trim();
-    const consumerSecret = process.env.CONSUMER_SECRET.trim();
+    const consumerKey = process.env.CONSAMER_KEY.trim();
+    const consumerSecret = process.env.CONSAMER_SECRET.trim();
 
     const credentials = Buffer
         .from(`${consumerKey}:${consumerSecret}`)
