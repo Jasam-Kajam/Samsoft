@@ -3,159 +3,90 @@
 
 /**
  * ============================================================
- * QUICKTEL BUNDLES — M-PESA BUY GOODS ONLINE STK PUSH
+ * QUICKTEL BUNDLES — PRODUCTION M-PESA STK PUSH
  * ============================================================
  *
- * Endpoint:
- * https://samsoft-coral.vercel.app/api/stkpush
+ * Deployment: Vercel
+ * Runtime: Node.js 24.x
+ * Endpoint: https://samsoft-coral.vercel.app/api/stkpush
+ * Frontend: https://quicktel-bundle.onrender.com
  *
- * Frontend:
- * https://quicktel-bundle.onrender.com
- *
- * Node.js: 24.x
- * Module system: CommonJS
+ * Transaction: CustomerBuyGoodsOnline
  *
  * Required environment variables:
- * CONSUMER_KEY
- * CONSUMER_SECRET
- * SHORTCODE
- * TILL_NUMBER
- * PASSKEY
- * CALLBACK_URL
+ *   CONSUMER_KEY
+ *   CONSUMER_SECRET
+ *   SHORTCODE
+ *   TILL_NUMBER
+ *   PASSKEY
+ *   CALLBACK_URL
  *
  * Optional environment variables:
- * ALLOWED_ORIGINS
- * TRANSACTION_TYPE
- * MIN_AMOUNT
- * MAX_AMOUNT
- * REQUEST_TIMEOUT_MS
- *
- * An accepted STK request is NOT proof of payment.
- * Verify the final result using your callback endpoint.
+ *   ALLOWED_ORIGINS
+ *   TRANSACTION_TYPE
+ *   MIN_AMOUNT
+ *   MAX_AMOUNT
+ *   REQUEST_TIMEOUT_MS
  * ============================================================
  */
-
-const axios = require("axios");
 
 // ============================================================
 // CONFIGURATION
 // ============================================================
 
-const SAFARICOM_BASE_URL = "https://api.safaricom.co.ke";
-
-const STK_PUSH_URL =
-    `${SAFARICOM_BASE_URL}/mpesa/stkpush/v1/processrequest`;
+const VERSION = "quicktel-stk-2026-10-21-v4";
 
 const ACCESS_TOKEN_URL =
-    `${SAFARICOM_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
+    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
 
-const BUILD_VERSION = "quicktel-stk-2026-10-21-v3";
+const STK_PUSH_URL =
+    "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest";
+
+const DEFAULT_ALLOWED_ORIGINS = [
+    "https://quicktel-bundle.onrender.com"
+];
+
+const TRANSACTION_TYPE =
+    process.env.TRANSACTION_TYPE || "CustomerBuyGoodsOnline";
+
+const MIN_AMOUNT = Number(process.env.MIN_AMOUNT || 1);
+const MAX_AMOUNT = Number(process.env.MAX_AMOUNT || 250000);
 
 const REQUEST_TIMEOUT_MS = Number(
     process.env.REQUEST_TIMEOUT_MS || 30000
 );
 
-const MIN_AMOUNT = Number(
-    process.env.MIN_AMOUNT || 1
-);
-
-const MAX_AMOUNT = Number(
-    process.env.MAX_AMOUNT || 250000
-);
-
-const TRANSACTION_TYPE =
-    process.env.TRANSACTION_TYPE ||
-    "CustomerBuyGoodsOnline";
-
-const ALLOWED_ORIGINS = (
-    process.env.ALLOWED_ORIGINS ||
-    "https://quicktel-bundle.onrender.com"
-)
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
-
 // ============================================================
-// RESPONSE HELPERS
+// HELPERS
 // ============================================================
 
-function sendJson(res, status, body) {
-    return res.status(status).json(body);
+function sendJson(res, statusCode, data) {
+    res.statusCode = statusCode;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(data));
 }
 
-function sendError(res, status, message, code) {
-    return sendJson(res, status, {
-        success: false,
-        message,
-        code
-    });
-}
+function getAllowedOrigins() {
+    const configured = process.env.ALLOWED_ORIGINS;
 
-// ============================================================
-// SAFE PROVIDER ERROR LOGGING
-// ============================================================
-
-function sanitizeProviderResponse(data) {
-    if (data == null) {
-        return null;
+    if (!configured) {
+        return DEFAULT_ALLOWED_ORIGINS;
     }
 
-    if (typeof data !== "object") {
-        return typeof data === "string"
-            ? data.slice(0, 1000)
-            : data;
-    }
-
-    const result = {};
-
-    const allowedKeys = [
-        "requestId",
-        "errorCode",
-        "errorMessage",
-        "ResponseCode",
-        "ResponseDescription",
-        "CustomerMessage",
-        "MerchantRequestID",
-        "CheckoutRequestID"
-    ];
-
-    for (const key of allowedKeys) {
-        if (data[key] !== undefined) {
-            result[key] = data[key];
-        }
-    }
-
-    return result;
+    return configured
+        .split(",")
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean);
 }
 
-function logProviderError(stage, error) {
-    const response = error.response;
-
-    // Never log credentials, authorization headers,
-    // access tokens, passwords, phone numbers or full payloads.
-    console.error(`[${BUILD_VERSION}] ${stage} failed:`, {
-        httpStatus: response?.status || null,
-        errorCode: response?.data?.errorCode || null,
-        errorMessage: response?.data?.errorMessage || null,
-        responseCode: response?.data?.ResponseCode || null,
-        responseDescription:
-            response?.data?.ResponseDescription || null,
-        requestId: response?.data?.requestId || null,
-        providerResponse: sanitizeProviderResponse(
-            response?.data
-        ),
-        networkCode: error.code || null
-    });
-}
-
-// ============================================================
-// CORS
-// ============================================================
-
-function configureCors(req, res) {
+function setCorsHeaders(req, res) {
     const origin = req.headers.origin;
+    const allowedOrigins = getAllowedOrigins();
 
-    res.setHeader("Vary", "Origin");
+    if (origin && allowedOrigins.includes(origin.replace(/\/+$/, ""))) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+    }
 
     res.setHeader(
         "Access-Control-Allow-Methods",
@@ -168,53 +99,16 @@ function configureCors(req, res) {
     );
 
     res.setHeader("Access-Control-Max-Age", "86400");
-
-    // Allow requests without Origin, such as Postman and
-    // server-to-server calls. This is not authentication.
-    if (!origin) {
-        return true;
-    }
-
-    const normalizedOrigin = origin
-        .trim()
-        .replace(/\/+$/, "");
-
-    if (!ALLOWED_ORIGINS.includes(normalizedOrigin)) {
-        return false;
-    }
-
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        normalizedOrigin
-    );
-
-    return true;
 }
 
-// ============================================================
-// REQUEST BODY
-// ============================================================
-
-function getRequestBody(req) {
-    if (
-        req.body &&
-        typeof req.body === "object" &&
-        !Array.isArray(req.body)
-    ) {
+function getBody(req) {
+    if (req.body && typeof req.body === "object") {
         return req.body;
     }
 
     if (typeof req.body === "string") {
         try {
-            const parsed = JSON.parse(req.body);
-
-            if (
-                parsed &&
-                typeof parsed === "object" &&
-                !Array.isArray(parsed)
-            ) {
-                return parsed;
-            }
+            return JSON.parse(req.body);
         } catch {
             return null;
         }
@@ -223,151 +117,17 @@ function getRequestBody(req) {
     return null;
 }
 
-// ============================================================
-// ENVIRONMENT VALIDATION
-// ============================================================
-
-function getConfiguration() {
-    const names = [
-        "CONSUMER_KEY",
-        "CONSUMER_SECRET",
-        "SHORTCODE",
-        "TILL_NUMBER",
-        "PASSKEY",
-        "CALLBACK_URL"
-    ];
-
-    const missing = names.filter((name) => {
-        const value = process.env[name];
-
-        return (
-            typeof value !== "string" ||
-            value.trim() === ""
-        );
-    });
-
-    if (missing.length > 0) {
-        console.error(
-            `[${BUILD_VERSION}] Missing environment variables:`,
-            missing
-        );
-
-        return {
-            valid: false,
-            message:
-                "The payment service is not fully configured."
-        };
-    }
-
-    if (
-        TRANSACTION_TYPE !== "CustomerBuyGoodsOnline"
-    ) {
-        return {
-            valid: false,
-            message:
-                "The configured transaction type is not supported."
-        };
-    }
-
-    const shortcode = process.env.SHORTCODE.trim();
-    const tillNumber = process.env.TILL_NUMBER.trim();
-
-    if (
-        !/^\d+$/.test(shortcode) ||
-        !/^\d+$/.test(tillNumber)
-    ) {
-        return {
-            valid: false,
-            message:
-                "The configured shortcode or till number is invalid."
-        };
-    }
-
-    let callbackUrl;
-
-    try {
-        callbackUrl = new URL(
-            process.env.CALLBACK_URL.trim()
-        );
-    } catch {
-        return {
-            valid: false,
-            message:
-                "The configured callback URL is invalid."
-        };
-    }
-
-    if (
-        callbackUrl.protocol !== "https:" ||
-        !callbackUrl.hostname ||
-        callbackUrl.username ||
-        callbackUrl.password
-    ) {
-        return {
-            valid: false,
-            message:
-                "The callback URL must be a valid HTTPS URL."
-        };
-    }
-
-    if (
-        !Number.isFinite(REQUEST_TIMEOUT_MS) ||
-        REQUEST_TIMEOUT_MS < 1000 ||
-        REQUEST_TIMEOUT_MS > 120000
-    ) {
-        return {
-            valid: false,
-            message:
-                "The payment timeout configuration is invalid."
-        };
-    }
-
-    if (
-        !Number.isSafeInteger(MIN_AMOUNT) ||
-        !Number.isSafeInteger(MAX_AMOUNT) ||
-        MIN_AMOUNT < 1 ||
-        MAX_AMOUNT < MIN_AMOUNT
-    ) {
-        return {
-            valid: false,
-            message:
-                "The payment amount configuration is invalid."
-        };
-    }
-
-    return {
-        valid: true,
-        consumerKey: process.env.CONSUMER_KEY.trim(),
-        consumerSecret: process.env.CONSUMER_SECRET.trim(),
-        shortcode,
-        tillNumber,
-        passkey: process.env.PASSKEY.trim(),
-        callbackUrl: callbackUrl.toString()
-    };
-}
-
-// ============================================================
-// KENYAN PHONE NORMALIZATION
-// ============================================================
-
-function normalizeKenyanPhone(value) {
-    if (
-        typeof value !== "string" &&
-        typeof value !== "number"
-    ) {
+function normalizePhoneNumber(value) {
+    if (value === undefined || value === null) {
         return null;
     }
 
-    let phone = String(value).trim();
+    let phone = String(value).trim().replace(/[\s()+-]/g, "");
 
-    phone = phone.replace(/[\s\-()]/g, "");
-
-    if (phone.startsWith("+254")) {
-        phone = phone.slice(1);
-    }
-
-    if (/^0[17]\d{8}$/.test(phone)) {
+    if (phone.startsWith("0")) {
         phone = "254" + phone.slice(1);
+    } else if (phone.startsWith("7") || phone.startsWith("1")) {
+        phone = "254" + phone;
     }
 
     if (!/^254[17]\d{8}$/.test(phone)) {
@@ -377,51 +137,7 @@ function normalizeKenyanPhone(value) {
     return phone;
 }
 
-// ============================================================
-// AMOUNT VALIDATION
-// ============================================================
-
-function validateAmount(value) {
-    if (
-        value === undefined ||
-        value === null ||
-        value === ""
-    ) {
-        return null;
-    }
-
-    if (
-        typeof value !== "number" &&
-        typeof value !== "string"
-    ) {
-        return null;
-    }
-
-    if (
-        typeof value === "string" &&
-        !/^\d+$/.test(value.trim())
-    ) {
-        return null;
-    }
-
-    const amount = Number(value);
-
-    if (
-        !Number.isSafeInteger(amount) ||
-        amount < MIN_AMOUNT ||
-        amount > MAX_AMOUNT
-    ) {
-        return null;
-    }
-
-    return amount;
-}
-
-// ============================================================
-// NAIROBI TIMESTAMP
-// ============================================================
-
-function getNairobiTimestamp() {
+function getTimestamp() {
     const parts = new Intl.DateTimeFormat("en-GB", {
         timeZone: "Africa/Nairobi",
         year: "numeric",
@@ -451,329 +167,406 @@ function getNairobiTimestamp() {
     );
 }
 
+function getConfigurationError() {
+    const required = [
+        "CONSUMER_KEY",
+        "CONSUMER_SECRET",
+        "SHORTCODE",
+        "TILL_NUMBER",
+        "PASSKEY",
+        "CALLBACK_URL"
+    ];
+
+    const missing = required.filter((name) => {
+        return !process.env[name] ||
+            !String(process.env[name]).trim();
+    });
+
+    if (missing.length > 0) {
+        return "Missing environment variables: " + missing.join(", ");
+    }
+
+    if (!/^\d+$/.test(process.env.SHORTCODE.trim())) {
+        return "SHORTCODE must contain digits only.";
+    }
+
+    if (!/^\d+$/.test(process.env.TILL_NUMBER.trim())) {
+        return "TILL_NUMBER must contain digits only.";
+    }
+
+    if (
+        !Number.isInteger(MIN_AMOUNT) ||
+        !Number.isInteger(MAX_AMOUNT) ||
+        MIN_AMOUNT < 1 ||
+        MAX_AMOUNT < MIN_AMOUNT
+    ) {
+        return "MIN_AMOUNT or MAX_AMOUNT configuration is invalid.";
+    }
+
+    if (
+        !Number.isFinite(REQUEST_TIMEOUT_MS) ||
+        REQUEST_TIMEOUT_MS < 1000
+    ) {
+        return "REQUEST_TIMEOUT_MS must be at least 1000.";
+    }
+
+    try {
+        const callback = new URL(process.env.CALLBACK_URL);
+
+        if (callback.protocol !== "https:") {
+            return "CALLBACK_URL must use HTTPS.";
+        }
+    } catch {
+        return "CALLBACK_URL is not a valid URL.";
+    }
+
+    return null;
+}
+
+async function fetchJson(url, options) {
+    const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+
+    const rawText = await response.text();
+
+    let data;
+
+    try {
+        data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+        data = { errorMessage: "The payment provider returned an invalid response." };
+    }
+
+    if (!response.ok) {
+        const error = new Error(
+            data.errorMessage ||
+            data.error_description ||
+            data.ResponseDescription ||
+            "The payment provider rejected the request."
+        );
+
+        error.status = response.status;
+        error.providerData = data;
+
+        throw error;
+    }
+
+    return data;
+}
+
 // ============================================================
 // SAFARICOM ACCESS TOKEN
 // ============================================================
 
-async function getAccessToken(config) {
-    const credentials = Buffer.from(
-        `${config.consumerKey}:${config.consumerSecret}`
-    ).toString("base64");
+async function getAccessToken() {
+    const consumerKey = process.env.CONSUMER_KEY.trim();
+    const consumerSecret = process.env.CONSUMER_SECRET.trim();
 
-    let response;
+    const credentials = Buffer
+        .from(`${consumerKey}:${consumerSecret}`)
+        .toString("base64");
 
-    try {
-        response = await axios.get(ACCESS_TOKEN_URL, {
-            headers: {
-                Authorization: `Basic ${credentials}`,
-                Accept: "application/json"
-            },
-            timeout: REQUEST_TIMEOUT_MS
-        });
-    } catch (error) {
-        logProviderError("ACCESS TOKEN", error);
+    const data = await fetchJson(ACCESS_TOKEN_URL, {
+        method: "GET",
+        headers: {
+            Authorization: `Basic ${credentials}`,
+            Accept: "application/json"
+        }
+    });
 
-        throw {
-            stage: "ACCESS_TOKEN",
-            status: error.response?.status || null,
-            code: error.code || null
-        };
+    if (!data.access_token) {
+        throw new Error("Safaricom did not return an access token.");
     }
 
-    const token = response.data?.access_token;
-
-    if (
-        typeof token !== "string" ||
-        token.length === 0
-    ) {
-        console.error(
-            `[${BUILD_VERSION}] Access token response had no token.`
-        );
-
-        throw {
-            stage: "ACCESS_TOKEN",
-            status: 502,
-            code: "INVALID_TOKEN_RESPONSE"
-        };
-    }
-
-    return token;
+    return data.access_token;
 }
 
 // ============================================================
-// PROVIDER ERROR MAPPING
+// STK PUSH
 // ============================================================
 
-function mapProviderError(error) {
-    if (
-        error.code === "ECONNABORTED" ||
-        error.code === "ETIMEDOUT"
-    ) {
-        return {
-            status: 504,
-            code: "PAYMENT_TIMEOUT",
-            message:
-                "The payment request timed out. Check its status before retrying."
-        };
-    }
+async function initiateStkPush({
+    phone,
+    amount,
+    accountReference,
+    transactionDescription
+}) {
+    const accessToken = await getAccessToken();
+    const timestamp = getTimestamp();
 
-    if (
-        error.code === "ECONNRESET" ||
-        error.code === "ENOTFOUND" ||
-        error.code === "EAI_AGAIN"
-    ) {
-        return {
-            status: 502,
-            code: "PROVIDER_CONNECTION_ERROR",
-            message:
-                "Unable to connect to the payment provider. Please try again later."
-        };
-    }
+    const shortcode = process.env.SHORTCODE.trim();
+    const tillNumber = process.env.TILL_NUMBER.trim();
+    const passkey = process.env.PASSKEY.trim();
 
-    if (
-        error.status === 401 ||
-        error.status === 403
-    ) {
-        return {
-            status: 502,
-            code: "PROVIDER_AUTHENTICATION_ERROR",
-            message:
-                "The payment provider rejected authentication. Check your production credentials."
-        };
-    }
+    const password = Buffer
+        .from(shortcode + passkey + timestamp)
+        .toString("base64");
 
-    if (error.status === 400) {
-        return {
-            status: 502,
-            code:
-                error.stage === "STK_PUSH"
-                    ? "STK_REQUEST_REJECTED"
-                    : "TOKEN_REQUEST_REJECTED",
-            message:
-                error.stage === "STK_PUSH"
-                    ? "Safaricom rejected the STK Push request. Check the server logs."
-                    : "Safaricom rejected the access-token request. Check the server logs."
-        };
-    }
-
-    return {
-        status: 502,
-        code: "PAYMENT_PROVIDER_ERROR",
-        message:
-            "The payment provider could not process the request. Please try again later."
-    };
-}
-
-// ============================================================
-// MAIN VERCEL HANDLER
-// ============================================================
-
-module.exports = async function handler(req, res) {
-    res.setHeader(
-        "X-Quicktel-Payment-Version",
-        BUILD_VERSION
-    );
-
-    // CORS
-    if (!configureCors(req, res)) {
-        return sendError(
-            res,
-            403,
-            "This origin is not permitted.",
-            "ORIGIN_NOT_ALLOWED"
-        );
-    }
-
-    // Preflight
-    if (req.method === "OPTIONS") {
-        return res.status(204).end();
-    }
-
-    // POST only
-    if (req.method !== "POST") {
-        res.setHeader("Allow", "POST, OPTIONS");
-
-        return sendError(
-            res,
-            405,
-            "Use POST to initiate a payment.",
-            "METHOD_NOT_ALLOWED"
-        );
-    }
-
-    // Configuration
-    const config = getConfiguration();
-
-    if (!config.valid) {
-        return sendError(
-            res,
-            500,
-            config.message,
-            "PAYMENT_CONFIGURATION_ERROR"
-        );
-    }
-
-    // Request body
-    const body = getRequestBody(req);
-
-    if (!body) {
-        return sendError(
-            res,
-            400,
-            "A valid JSON request body is required.",
-            "INVALID_REQUEST_BODY"
-        );
-    }
-
-    // Phone number
-    const phone = normalizeKenyanPhone(
-        body.phone ??
-        body.phoneNumber ??
-        body.msisdn
-    );
-
-    if (!phone) {
-        return sendError(
-            res,
-            400,
-            "Enter a valid Kenyan mobile number.",
-            "INVALID_PHONE"
-        );
-    }
-
-    // Amount
-    const amount = validateAmount(body.amount);
-
-    if (amount === null) {
-        return sendError(
-            res,
-            400,
-            `Amount must be a whole number between ${MIN_AMOUNT} and ${MAX_AMOUNT}.`,
-            "INVALID_AMOUNT"
-        );
-    }
-
-    // Timestamp and password
-    const timestamp = getNairobiTimestamp();
-
-    const password = Buffer.from(
-        config.shortcode +
-        config.passkey +
-        timestamp
-    ).toString("base64");
-
-    // STK Push payload
-    const stkPayload = {
-        BusinessShortCode: config.shortcode,
+    const payload = {
+        BusinessShortCode: shortcode,
         Password: password,
         Timestamp: timestamp,
         TransactionType: TRANSACTION_TYPE,
         Amount: amount,
         PartyA: phone,
-        PartyB: config.tillNumber,
+        PartyB: tillNumber,
         PhoneNumber: phone,
-        CallBackURL: config.callbackUrl,
-        AccountReference: "Quicktel",
-        TransactionDesc: "Bundles Payment"
+        CallBackURL: process.env.CALLBACK_URL.trim(),
+        AccountReference: accountReference,
+        TransactionDesc: transactionDescription
     };
 
-    // Obtain access token
-    let accessToken;
-
-    try {
-        accessToken = await getAccessToken(config);
-    } catch (error) {
-        const failure = mapProviderError(error);
-
-        return sendError(
-            res,
-            failure.status,
-            failure.message,
-            failure.code
-        );
-    }
-
-    // Initiate STK Push
-    let response;
-
-    try {
-        response = await axios.post(
-            STK_PUSH_URL,
-            stkPayload,
-            {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    "Content-Type": "application/json",
-                    Accept: "application/json"
-                },
-                timeout: REQUEST_TIMEOUT_MS
-            }
-        );
-    } catch (error) {
-        logProviderError("STK PUSH", error);
-
-        const failure = mapProviderError({
-            stage: "STK_PUSH",
-            status: error.response?.status || null,
-            code: error.code || null
-        });
-
-        return sendError(
-            res,
-            failure.status,
-            failure.message,
-            failure.code
-        );
-    }
-
-    // Provider response
-    const data = response.data || {};
-
-    console.log(`[${BUILD_VERSION}] STK response:`, {
-        httpStatus: response.status,
-        responseCode: data.ResponseCode ?? null,
-        responseDescription:
-            data.ResponseDescription ?? null,
-        merchantRequestId:
-            data.MerchantRequestID ?? null,
-        checkoutRequestId:
-            data.CheckoutRequestID ?? null
+    return fetchJson(STK_PUSH_URL, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/json"
+        },
+        body: JSON.stringify(payload)
     });
+}
 
-    // Safaricom rejected the request
-    if (String(data.ResponseCode) !== "0") {
-        return sendJson(res, 502, {
+// ============================================================
+// ERROR HANDLING
+// ============================================================
+
+function getSafeErrorMessage(error) {
+    if (error && error.name === "TimeoutError") {
+        return "The request timed out. Check your payment status before trying again.";
+    }
+
+    if (error && error.name === "AbortError") {
+        return "The request was interrupted. Check your payment status before trying again.";
+    }
+
+    if (error && error.status === 401) {
+        return "Safaricom authentication failed. Check your production API credentials.";
+    }
+
+    if (error && error.status === 403) {
+        return "Safaricom denied the request. Check your Daraja permissions and shortcode configuration.";
+    }
+
+    if (error && error.status === 400) {
+        return "Safaricom rejected the payment details. Verify your shortcode, till number, passkey and transaction type.";
+    }
+
+    if (error && error.status >= 500) {
+        return "Safaricom's payment service is temporarily unavailable. Check transaction status before retrying.";
+    }
+
+    if (
+        error &&
+        error.message &&
+        error.message.startsWith("Missing environment variables:")
+    ) {
+        return error.message;
+    }
+
+    if (
+        error &&
+        error.message &&
+        (
+            error.message.includes("SHORTCODE") ||
+            error.message.includes("TILL_NUMBER") ||
+            error.message.includes("CALLBACK_URL") ||
+            error.message.includes("MIN_AMOUNT") ||
+            error.message.includes("MAX_AMOUNT") ||
+            error.message.includes("REQUEST_TIMEOUT_MS")
+        )
+    ) {
+        return error.message;
+    }
+
+    return "Unable to initiate the M-PESA payment. Please try again later.";
+}
+
+// ============================================================
+// VERCEL HANDLER
+// ============================================================
+
+module.exports = async function handler(req, res) {
+    setCorsHeaders(req, res);
+
+    // CORS preflight request
+    if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        return res.end();
+    }
+
+    // Only POST is supported
+    if (req.method !== "POST") {
+        res.setHeader("Allow", "POST, OPTIONS");
+
+        return sendJson(res, 405, {
             success: false,
-            message:
-                data.ResponseDescription ||
-                "Safaricom did not accept the STK Push request.",
-            code: "STK_REQUEST_REJECTED",
-            data: {
-                ResponseCode: data.ResponseCode ?? null,
-                ResponseDescription:
-                    data.ResponseDescription ?? null
-            }
+            message: "Method not allowed. Use POST.",
+            version: VERSION
         });
     }
 
-    // Request accepted, NOT yet confirmed as paid
-    return sendJson(res, 200, {
-        success: true,
-        message:
-            data.CustomerMessage ||
-            "STK Push accepted. Check your phone to complete payment.",
-        data: {
-            MerchantRequestID:
-                data.MerchantRequestID || null,
-            CheckoutRequestID:
-                data.CheckoutRequestID || null,
-            ResponseCode: String(data.ResponseCode),
-            ResponseDescription:
-                data.ResponseDescription ||
-                "Success. Request accepted for processing",
-            CustomerMessage:
-                data.CustomerMessage ||
-                "Check your phone to complete payment."
+    // Reject browser requests from unapproved origins.
+    // Postman and server-to-server requests may have no Origin header.
+    const origin = req.headers.origin;
+
+    if (
+        origin &&
+        !getAllowedOrigins().includes(origin.replace(/\/+$/, ""))
+    ) {
+        return sendJson(res, 403, {
+            success: false,
+            message: "This website is not allowed to initiate payments.",
+            version: VERSION
+        });
+    }
+
+    // Check server configuration before processing payments.
+    const configurationError = getConfigurationError();
+
+    if (configurationError) {
+        console.error("[Quicktel STK] Configuration error:", configurationError);
+
+        return sendJson(res, 500, {
+            success: false,
+            message: "Payment service configuration error.",
+            version: VERSION
+        });
+    }
+
+    const body = getBody(req);
+
+    if (!body) {
+        return sendJson(res, 400, {
+            success: false,
+            message: "A valid JSON request body is required.",
+            version: VERSION
+        });
+    }
+
+    // Accept the phone field used by the Quicktel frontend.
+    const phone = normalizePhoneNumber(
+        body.phone || body.phoneNumber || body.msisdn
+    );
+
+    if (!phone) {
+        return sendJson(res, 400, {
+            success: false,
+            message: "Enter a valid Kenyan M-PESA phone number, such as 0712345678 or 254712345678.",
+            version: VERSION
+        });
+    }
+
+    const rawAmount = body.amount;
+    const amount = Number(rawAmount);
+
+    if (
+        rawAmount === undefined ||
+        rawAmount === null ||
+        String(rawAmount).trim() === "" ||
+        !Number.isFinite(amount) ||
+        !Number.isInteger(amount) ||
+        amount < MIN_AMOUNT ||
+        amount > MAX_AMOUNT
+    ) {
+        return sendJson(res, 400, {
+            success: false,
+            message: `Amount must be a whole number between Ksh ${MIN_AMOUNT} and Ksh ${MAX_AMOUNT}.`,
+            version: VERSION
+        });
+    }
+
+    const packageName = String(
+        body.packageSize ||
+        body.package ||
+        body.title ||
+        "Quicktel Bundle"
+    )
+        .trim()
+        .replace(/[\r\n]/g, " ")
+        .slice(0, 50);
+
+    const accountReference = (
+        packageName || "Quicktel Bundle"
+    ).slice(0, 12);
+
+    const transactionDescription = (
+        "Quicktel " + (packageName || "Bundle")
+    ).slice(0, 30);
+
+    try {
+        console.log("[Quicktel STK] Initiating payment", {
+            version: VERSION,
+            phone: phone.slice(0, 6) + "*****",
+            amount,
+            transactionType: TRANSACTION_TYPE
+        });
+
+        const result = await initiateStkPush({
+            phone,
+            amount,
+            accountReference,
+            transactionDescription
+        });
+
+        const accepted =
+            String(result.ResponseCode) === "0" &&
+            Boolean(result.CheckoutRequestID);
+
+        if (!accepted) {
+            console.error("[Quicktel STK] Provider rejected request", {
+                responseCode: result.ResponseCode,
+                responseDescription: result.ResponseDescription
+            });
+
+            return sendJson(res, 502, {
+                success: false,
+                message:
+                    result.ResponseDescription ||
+                    "Safaricom did not accept the STK Push request.",
+                data: {
+                    ResponseCode: result.ResponseCode || null
+                },
+                version: VERSION
+            });
         }
-    });
+
+        console.log("[Quicktel STK] Request accepted", {
+            checkoutRequestId: result.CheckoutRequestID
+        });
+
+        return sendJson(res, 200, {
+            success: true,
+            message:
+                result.CustomerMessage ||
+                "STK Push request accepted. Check your phone and enter your M-PESA PIN to complete payment.",
+            data: {
+                MerchantRequestID: result.MerchantRequestID || null,
+                CheckoutRequestID: result.CheckoutRequestID,
+                ResponseCode: result.ResponseCode,
+                ResponseDescription: result.ResponseDescription || null,
+                CustomerMessage: result.CustomerMessage || null
+            },
+            version: VERSION
+        });
+    } catch (error) {
+        console.error("[Quicktel STK] Request failed", {
+            version: VERSION,
+            status: error.status || null,
+            errorName: error.name || "Error",
+            message: error.message || "Unknown error"
+        });
+
+        const isTimeout =
+            error.name === "TimeoutError" ||
+            error.name === "AbortError";
+
+        return sendJson(res, isTimeout ? 504 : 502, {
+            success: false,
+            message: getSafeErrorMessage(error),
+            version: VERSION
+        });
+    }
 };
