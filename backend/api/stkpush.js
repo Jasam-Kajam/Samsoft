@@ -49,7 +49,7 @@ const SAFARICOM_BASE_URL =
 "https://api.safaricom.co.ke";
 
 const STK_PUSH_URL =
-${SAFARICOM_BASE_URL}/mpesa/stkpush/v1/processrequest;
+    `${SAFARICOM_BASE_URL}/mpesa/stkpush/v1/processrequest`;
 
 const ACCESS_TOKEN_URL =
 ${SAFARICOM_BASE_URL}/oauth/v1/generate?grant_type=client_credentials;
