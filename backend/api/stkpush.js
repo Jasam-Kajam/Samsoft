@@ -540,7 +540,7 @@ module.exports = async function handler(req, res) {
             success: true,
             message:
                 result.CustomerMessage ||
-                "STK Push request accepted. Check your phone and enter your M-PESA PIN to complete payment.",
+                "Check your phone and enter your M-PESA PIN to complete payment.",
             data: {
                 MerchantRequestID: result.MerchantRequestID || null,
                 CheckoutRequestID: result.CheckoutRequestID,
