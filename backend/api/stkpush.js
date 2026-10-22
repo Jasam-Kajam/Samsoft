@@ -15,13 +15,14 @@
  * Firebase collection:
  * quicktelPayments
  *
- * Environment variables:
+ * Required environment variables:
  * CONSAMER_KEY
  * CONSAMER_SECRET
  * SHORTCODE
  * TILL_NUMBER
  * PASSKEY
  * CALLBACK_URL
+ * FIREBASE_SERVICE_ACCOUNT_JSON
  *
  * Optional:
  * ALLOWED_ORIGINS
@@ -52,11 +53,17 @@ const REQUEST_TIMEOUT_MS = Number(
   process.env.REQUEST_TIMEOUT_MS || 30000
 );
 
-const MIN_AMOUNT = Number(process.env.MIN_AMOUNT || 1);
-const MAX_AMOUNT = Number(process.env.MAX_AMOUNT || 250000);
+const MIN_AMOUNT = Number(
+  process.env.MIN_AMOUNT || 1
+);
+
+const MAX_AMOUNT = Number(
+  process.env.MAX_AMOUNT || 250000
+);
 
 const TRANSACTION_TYPE =
-  process.env.TRANSACTION_TYPE || "CustomerBuyGoodsOnline";
+  process.env.TRANSACTION_TYPE ||
+  "CustomerBuyGoodsOnline";
 
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ||
@@ -66,15 +73,27 @@ const ALLOWED_ORIGINS = (
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
-const BUILD_VERSION = "quicktel-stk-2026-10-22-v6";
+const BUILD_VERSION =
+  "quicktel-stk-2026-10-23-v7";
+
+const FINAL_STATUSES = new Set([
+  "SUCCESS",
+  "CANCELLED",
+  "FAILED"
+]);
 
 // ============================================================
 // RESPONSE HELPERS
 // ============================================================
 
 function sendJson(res, statusCode, body) {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader(
+    "Content-Type",
+    "application/json; charset=utf-8"
+  );
+
   res.setHeader("Cache-Control", "no-store");
+
   return res.status(statusCode).json(body);
 }
 
@@ -116,15 +135,13 @@ function sanitizeProviderResponse(data) {
 }
 
 function logProviderError(stage, error) {
-  const providerResponse = error.response;
-
   console.error(`[${BUILD_VERSION}] ${stage} failed:`, {
-    httpStatus: providerResponse?.status || null,
+    httpStatus: error.response?.status || null,
     providerResponse: sanitizeProviderResponse(
-      providerResponse?.data
+      error.response?.data
     ),
     networkCode: error.code || null,
-    message: error.message
+    message: error.message || "Unknown provider error"
   });
 }
 
@@ -136,14 +153,20 @@ function configureCors(req, res) {
   const origin = req.headers.origin;
 
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "POST, OPTIONS"
+  );
+
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization"
   );
+
   res.setHeader("Access-Control-Max-Age", "86400");
 
-  // Allow server-to-server and Postman requests without Origin.
+  // Permit server-to-server and Postman requests without Origin.
   if (!origin) {
     return true;
   }
@@ -154,7 +177,11 @@ function configureCors(req, res) {
     return false;
   }
 
-  res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    normalizedOrigin
+  );
+
   return true;
 }
 
@@ -225,30 +252,38 @@ function getConfiguration() {
     };
   }
 
-  if (TRANSACTION_TYPE !== "CustomerBuyGoodsOnline") {
+  if (
+    TRANSACTION_TYPE !== "CustomerBuyGoodsOnline"
+  ) {
     return {
       valid: false,
-      message: "The configured transaction type is not supported."
+      message:
+        "The configured transaction type is not supported."
     };
   }
 
   const shortcode = process.env.SHORTCODE.trim();
   const tillNumber = process.env.TILL_NUMBER.trim();
+  const passkey = process.env.PASSKEY.trim();
 
   if (
     !/^\d+$/.test(shortcode) ||
-    !/^\d+$/.test(tillNumber)
+    !/^\d+$/.test(tillNumber) ||
+    !passkey
   ) {
     return {
       valid: false,
-      message: "The configured shortcode or till number is invalid."
+      message:
+        "The configured shortcode, till number or passkey is invalid."
     };
   }
 
   let callbackUrl;
 
   try {
-    callbackUrl = new URL(process.env.CALLBACK_URL.trim());
+    callbackUrl = new URL(
+      process.env.CALLBACK_URL.trim()
+    );
   } catch {
     return {
       valid: false,
@@ -256,16 +291,22 @@ function getConfiguration() {
     };
   }
 
-  if (callbackUrl.protocol !== "https:") {
+  if (
+    callbackUrl.protocol !== "https:" ||
+    callbackUrl.username ||
+    callbackUrl.password
+  ) {
     return {
       valid: false,
-      message: "The callback URL must use HTTPS."
+      message:
+        "The callback URL must be a valid HTTPS URL."
     };
   }
 
   if (
     !Number.isFinite(REQUEST_TIMEOUT_MS) ||
-    REQUEST_TIMEOUT_MS < 1000
+    REQUEST_TIMEOUT_MS < 1000 ||
+    REQUEST_TIMEOUT_MS > 120000
   ) {
     return {
       valid: false,
@@ -288,14 +329,13 @@ function getConfiguration() {
   return {
     valid: true,
 
-    // Keep these internal property names.
-    // The environment variable spellings above are intentional.
+    // These environment variable spellings are intentional.
     consumerKey: process.env.CONSAMER_KEY.trim(),
     consumerSecret: process.env.CONSAMER_SECRET.trim(),
 
     shortcode,
     tillNumber,
-    passkey: process.env.PASSKEY.trim(),
+    passkey,
     callbackUrl: callbackUrl.toString()
   };
 }
@@ -313,6 +353,7 @@ function normalizeKenyanPhone(value) {
   }
 
   let phone = String(value).trim();
+
   phone = phone.replace(/[\s\-()]/g, "");
 
   if (phone.startsWith("+254")) {
@@ -361,6 +402,22 @@ function validateAmount(value) {
   }
 
   return amount;
+}
+
+// ============================================================
+// PACKAGE NAME AND VALIDITY VALIDATION
+// ============================================================
+
+function validateTextField(value, maxLength = 120) {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.trim().length > maxLength
+  ) {
+    return null;
+  }
+
+  return value.trim();
 }
 
 // ============================================================
@@ -428,7 +485,10 @@ async function getAccessToken(config) {
 
   const token = response.data?.access_token;
 
-  if (typeof token !== "string" || token.length === 0) {
+  if (
+    typeof token !== "string" ||
+    token.length === 0
+  ) {
     console.error(
       `[${BUILD_VERSION}] Access token response contained no token.`
     );
@@ -448,7 +508,10 @@ async function getAccessToken(config) {
 // ============================================================
 
 function mapProviderError(error) {
-  if (error.code === "ECONNABORTED") {
+  if (
+    error.code === "ECONNABORTED" ||
+    error.code === "ETIMEDOUT"
+  ) {
     return {
       status: 504,
       code: "PAYMENT_TIMEOUT",
@@ -457,7 +520,10 @@ function mapProviderError(error) {
     };
   }
 
-  if (error.status === 401 || error.status === 403) {
+  if (
+    error.status === 401 ||
+    error.status === 403
+  ) {
     return {
       status: 502,
       code: "PROVIDER_AUTHENTICATION_ERROR",
@@ -497,6 +563,8 @@ async function savePaymentTracking({
   merchantRequestId,
   phone,
   amount,
+  packageName,
+  validity,
   statusTokenHash
 }) {
   const db = getDb();
@@ -507,25 +575,24 @@ async function savePaymentTracking({
 
   await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(paymentRef);
-    const existing = snapshot.exists ? snapshot.data() : {};
+
+    const existing = snapshot.exists
+      ? snapshot.data()
+      : {};
 
     const currentStatus = String(
       existing.status || ""
     ).toUpperCase();
 
-    const finalStatuses = [
-      "SUCCESS",
-      "CANCELLED",
-      "FAILED"
-    ];
-
-    const isFinal = finalStatuses.includes(currentStatus);
+    const isFinal = FINAL_STATUSES.has(currentStatus);
 
     const record = {
       checkoutRequestId,
       merchantRequestId: merchantRequestId || null,
       phoneNumber: phone,
       amount,
+      packageName,
+      validity,
       statusTokenHash,
       updatedAt: new Date()
     };
@@ -534,14 +601,16 @@ async function savePaymentTracking({
       record.createdAt = new Date();
     }
 
-    // Do not overwrite a final callback result if it arrived first.
+    // Preserve final callback status if callback arrived first.
     if (!isFinal) {
       record.status = "PENDING";
       record.resultDescription =
         "Waiting for Safaricom confirmation.";
     }
 
-    transaction.set(paymentRef, record, { merge: true });
+    transaction.set(paymentRef, record, {
+      merge: true
+    });
   });
 }
 
@@ -550,7 +619,10 @@ async function savePaymentTracking({
 // ============================================================
 
 module.exports = async function handler(req, res) {
-  res.setHeader("X-Quicktel-Payment-Version", BUILD_VERSION);
+  res.setHeader(
+    "X-Quicktel-Payment-Version",
+    BUILD_VERSION
+  );
 
   // CORS
   if (!configureCors(req, res)) {
@@ -593,7 +665,9 @@ module.exports = async function handler(req, res) {
 
   // Validate phone
   const phone = normalizeKenyanPhone(
-    body.phone ?? body.phoneNumber ?? body.msisdn
+    body.phone ??
+    body.phoneNumber ??
+    body.msisdn
   );
 
   if (!phone) {
@@ -617,6 +691,37 @@ module.exports = async function handler(req, res) {
     );
   }
 
+  // Validate package name.
+  const packageName = validateTextField(
+    body.packageName ??
+    body.package ??
+    body.packageSize ??
+    body.title
+  );
+
+  if (!packageName) {
+    return sendError(
+      res,
+      400,
+      "A valid package name is required.",
+      "INVALID_PACKAGE"
+    );
+  }
+
+  // Validate package validity.
+  const validity = validateTextField(
+    body.validity
+  );
+
+  if (!validity) {
+    return sendError(
+      res,
+      400,
+      "Valid package validity information is required.",
+      "INVALID_VALIDITY"
+    );
+  }
+
   // Validate environment
   const config = getConfiguration();
 
@@ -633,7 +738,9 @@ module.exports = async function handler(req, res) {
   const timestamp = getNairobiTimestamp();
 
   const password = Buffer.from(
-    config.shortcode + config.passkey + timestamp
+    config.shortcode +
+    config.passkey +
+    timestamp
   ).toString("base64");
 
   // Safaricom request payload
@@ -671,14 +778,18 @@ module.exports = async function handler(req, res) {
   let response;
 
   try {
-    response = await axios.post(STK_PUSH_URL, stkPayload, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/json"
-      },
-      timeout: REQUEST_TIMEOUT_MS
-    });
+    response = await axios.post(
+      STK_PUSH_URL,
+      stkPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        timeout: REQUEST_TIMEOUT_MS
+      }
+    );
   } catch (error) {
     logProviderError("STK PUSH", error);
 
@@ -702,9 +813,12 @@ module.exports = async function handler(req, res) {
   console.log(`[${BUILD_VERSION}] STK response:`, {
     httpStatus: response.status,
     responseCode: data.ResponseCode ?? null,
-    responseDescription: data.ResponseDescription ?? null,
-    merchantRequestId: data.MerchantRequestID ?? null,
-    checkoutRequestId: data.CheckoutRequestID ?? null
+    responseDescription:
+      data.ResponseDescription ?? null,
+    merchantRequestId:
+      data.MerchantRequestID ?? null,
+    checkoutRequestId:
+      data.CheckoutRequestID ?? null
   });
 
   // Safaricom rejected the request
@@ -717,18 +831,24 @@ module.exports = async function handler(req, res) {
       code: "STK_REQUEST_REJECTED",
       data: {
         ResponseCode: data.ResponseCode ?? null,
-        ResponseDescription: data.ResponseDescription ?? null
+        ResponseDescription:
+          data.ResponseDescription ?? null
       }
     });
   }
 
   // Validate checkout reference
-  const checkoutRequestId = data.CheckoutRequestID;
-  const merchantRequestId = data.MerchantRequestID || null;
+  const checkoutRequestId =
+    data.CheckoutRequestID;
+
+  const merchantRequestId =
+    data.MerchantRequestID || null;
 
   if (
     typeof checkoutRequestId !== "string" ||
-    !/^ws_CO_[A-Za-z0-9_-]+$/.test(checkoutRequestId)
+    !/^ws_CO_[A-Za-z0-9_-]+$/.test(
+      checkoutRequestId
+    )
   ) {
     console.error(
       `[${BUILD_VERSION}] Accepted STK response had no valid checkout reference.`
@@ -741,27 +861,32 @@ module.exports = async function handler(req, res) {
         "Safaricom accepted the request, but the payment reference was missing. Check your M-PESA messages before retrying.",
       data: {
         MerchantRequestID: merchantRequestId,
-        CheckoutRequestID: checkoutRequestId || null,
+        CheckoutRequestID:
+          checkoutRequestId || null,
         ResponseCode: String(data.ResponseCode)
       }
     });
   }
 
-  // Generate a cryptographically secure status token
-  const statusToken = crypto.randomBytes(32).toString("hex");
+  // Generate a cryptographically secure status token.
+  const statusToken = crypto
+    .randomBytes(32)
+    .toString("hex");
 
   const statusTokenHash = crypto
     .createHash("sha256")
     .update(statusToken)
     .digest("hex");
 
-  // Save token hash and pending payment before returning token
+  // Save payment tracking before returning the token.
   try {
     await savePaymentTracking({
       checkoutRequestId,
       merchantRequestId,
       phone,
       amount,
+      packageName,
+      validity,
       statusTokenHash
     });
   } catch (error) {
@@ -770,7 +895,8 @@ module.exports = async function handler(req, res) {
       error.message
     );
 
-    // The STK request was already accepted by Safaricom.
+    // Safaricom has already accepted the STK request.
+    // Do not automatically send another STK request.
     return sendJson(res, 200, {
       success: true,
       trackingAvailable: false,
@@ -784,7 +910,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Return original token to frontend. Never log this token.
+  // Return the original token. Never log it.
   return sendJson(res, 200, {
     success: true,
     trackingAvailable: true,
@@ -801,6 +927,9 @@ module.exports = async function handler(req, res) {
       CustomerMessage:
         data.CustomerMessage ||
         "Check your phone to complete the payment.",
+      packageName,
+      validity,
+      amount,
       statusToken
     }
   });
