@@ -9,7 +9,10 @@ const ALLOWED_ORIGIN =
 
 function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader(
+    "Content-Type",
+    "application/json; charset=utf-8"
+  );
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(data));
 }
@@ -34,12 +37,21 @@ module.exports = async function handler(req, res) {
   const origin = req.headers.origin;
 
   if (origin === ALLOWED_ORIGIN) {
-    res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      ALLOWED_ORIGIN
+    );
     res.setHeader("Vary", "Origin");
   }
 
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "POST, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type"
+  );
 
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
@@ -55,6 +67,7 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST, OPTIONS");
+
     return sendJson(res, 405, {
       success: false,
       message: "Use POST."
@@ -92,11 +105,7 @@ module.exports = async function handler(req, res) {
 
     const payment = snapshot.data();
 
-    const suppliedHash = crypto
-      .createHash("sha256")
-      .update(statusToken)
-      .digest();
-
+    // Verify the customer's payment-status token.
     const savedHash = payment.statusTokenHash;
 
     if (
@@ -109,11 +118,19 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const suppliedHash = crypto
+      .createHash("sha256")
+      .update(statusToken)
+      .digest();
+
     const storedHash = Buffer.from(savedHash, "hex");
 
     if (
       storedHash.length !== suppliedHash.length ||
-      !crypto.timingSafeEqual(storedHash, suppliedHash)
+      !crypto.timingSafeEqual(
+        storedHash,
+        suppliedHash
+      )
     ) {
       return sendJson(res, 403, {
         success: false,
@@ -121,12 +138,37 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const allowedStatuses = [
+      "PENDING",
+      "SUCCESS",
+      "CANCELLED",
+      "FAILED"
+    ];
+
+    const status = allowedStatuses.includes(payment.status)
+      ? payment.status
+      : "PENDING";
+
+    const receiptNumber =
+      payment.mpesaReceiptNumber ||
+      payment.receipt ||
+      null;
+
+    const message =
+      payment.resultDescription ||
+      (status === "SUCCESS"
+        ? "Payment successful."
+        : status === "CANCELLED"
+        ? "Payment was cancelled."
+        : status === "FAILED"
+        ? "Payment failed."
+        : "Waiting for Safaricom confirmation.");
+
     return sendJson(res, 200, {
       success: true,
-      status: payment.status || "PENDING",
-      message: payment.resultDescription ||
-        "Waiting for Safaricom confirmation.",
-      receiptNumber: payment.mpesaReceiptNumber || null,
+      status,
+      message,
+      receiptNumber,
       amount: payment.amount ?? null
     });
   } catch (error) {
@@ -137,7 +179,8 @@ module.exports = async function handler(req, res) {
 
     return sendJson(res, 500, {
       success: false,
-      message: "Unable to check payment status right now."
+      message:
+        "Unable to check payment status right now."
     });
   }
 };
